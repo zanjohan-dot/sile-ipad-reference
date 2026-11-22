@@ -30,6 +30,14 @@ function questionCount(){return DATA?DATA.subjects.reduce((n,s)=>n+asList(s.ques
 function updateStatus(){$('#statusBtn').textContent=DATA?'Local data · '+questionCount()+' questions':'No local data'}
 function updateContext(){const s=currentSubject();const m=mode==='rapid'?'Rapid':'Learn';$('#contextLabel').textContent=s?'Paper '+paper+' - '+s.subject+' - '+m:'Paper '+paper+' - '+m}
 
+// Local change-detection marker for the answer and question actually attempted.
+// Not a cryptographic signature or an official legal-content verification.
+function questionRevision(q){
+ const canonical=JSON.stringify([q.id,q.stem,q.options,q.answer_status,q.answer,q.answer_basis]);
+ let h=2166136261;
+ for(let i=0;i<canonical.length;i++)h=Math.imul(h^canonical.charCodeAt(i),16777619);
+ return "local-v1-"+(h>>>0).toString(16);
+}
 function flatten(){
  flat=[];
  DATA.subjects.forEach(s=>{
@@ -296,37 +304,68 @@ function openQuestion(q){
  section("Course material",q.course_material)+section("Contact Session guidance",q.cs_guidance)+section("Legal authority",q.authority)+
  '</div>';
  const attempt=studyProgress.questions[q.id];
+ const scoreUnverified=!!(attempt?.attempts && attempt.questionRevision!==questionRevision(q));
  setScreen('<div class="reader">'+focusHeader()+
   '<div class="readerMeta">Revision practice · '+esc(q.sitting||q.category||"Question")+'</div>'+
   '<h1 class="pageTitle">'+esc((q.label||"Question")+(q.qno?" · Q"+q.qno:""))+'</h1>'+
   '<div class="provenanceStrip">'+provenanceBadges(q)+'</div>'+
   '<div class="dataNote">'+(incompleteOptions?'Source verification needed: answer options may be incomplete and this attempt will not count as official-key accuracy.':'Practice using source questions only; the recorded answer may require later reconciliation.')+'</div>'+
   section("Question",q.stem,"rule")+
+  (scoreUnverified?'<div class="dataNote"><strong>Earlier attempt history retained.</strong> Previous official-key scores cannot be verified against this answer version. Reattempt the question to establish a current score.</div>':'')+
   '<section class="readSection"><h2>Choose your answer</h2>'+window.SILEUX.questionAttemptUI(q,attempt)+'</section>'+
+  '<div class="studyActions"><button type="button" id="toggleQuestionReview" class="secondaryButton" aria-pressed="'+(attempt?.needsReview?'true':'false')+'">'+
+  (attempt?.needsReview?'Remove from revision list':'Mark this question for revision')+'</button><span id="questionReviewStatus" class="readerMeta" role="status"></span></div>'+
   answer+'</div>');
  bindBack();
- const reveal=(selected,record)=>{
+ const reveal=async(selected,record)=>{
+  const submit=$('#submitPractice');
   if(record&&selected){
+   if(submit)submit.disabled=true;
    const old=studyProgress.questions[q.id]||{attempts:0,officialCorrect:0};
+   const revision=questionRevision(q),sameVersion=old.questionRevision===revision;
    const official=status==="OFFICIAL"&&Object.keys(q.options||{}).length===4;
-   studyProgress.questions[q.id]={
-     attempts:old.attempts+1,officialCorrect:old.officialCorrect+(official&&selected===q.answer?1:0),
-     lastSelected:selected,lastStatus:status,lastAttempt:new Date().toISOString()
+   const updated={
+    ...old,attempts:Number(old.attempts||0)+1,
+    officialCorrect:(sameVersion?Number(old.officialCorrect||0):0)+(official&&selected===q.answer?1:0),
+    officialAttempts:(sameVersion?Number(old.officialAttempts||0):0)+(official?1:0),
+    lastSelected:selected,lastStatus:status,lastAttempt:new Date().toISOString(),questionRevision:revision
    };
-   dbPut('study_progress_v1',studyProgress).catch(err=>console.error("Progress save failed",err));
+   const proposed={...studyProgress,questions:{...studyProgress.questions,[q.id]:updated}};
+   try{await dbPut('study_progress_v1',proposed);studyProgress=proposed}
+   catch(err){
+    console.error("Progress save failed",err);
+    const feedback=$('#practiceFeedback');
+    if(feedback)feedback.textContent="Attempt NOT SAVED. Please check local storage and try again. Your answer has not been graded.";
+    if(submit)submit.disabled=false;
+    return;
+   }
   }
   const message=window.SILEUX.interpretation(q,selected);
   const feedback=$('#practiceFeedback');
-  if(feedback)feedback.innerHTML='<div class="dataNote">'+esc(message)+'</div>';
+  if(feedback)feedback.textContent=(record?"Attempt saved locally. ":"")+message;
   $('#answerBlock').classList.add("revealed");
   $('#answerBlock').scrollIntoView({block:"nearest"});
  };
  $('#submitPractice').onclick=()=>{
    const selected=document.querySelector('input[name="practiceChoice"]:checked');
    if(!selected){const feedback=$('#practiceFeedback');if(feedback)feedback.textContent="Choose an answer first, or reveal without recording.";return;}
-   reveal(selected.value,true);$('#submitPractice').disabled=true;
+   void reveal(selected.value,true);
  };
- $('#revealWithoutAttempt').onclick=()=>reveal("",false);
+ $('#revealWithoutAttempt').onclick=()=>{void reveal("",false)};
+ $('#toggleQuestionReview').onclick=async()=>{
+   const button=$('#toggleQuestionReview'),statusBox=$('#questionReviewStatus');
+   button.disabled=true;
+   const old=studyProgress.questions[q.id]||{};
+   const next={...old,needsReview:!old.needsReview,reviewUpdated:new Date().toISOString()};
+   const updated={...studyProgress,questions:{...studyProgress.questions,[q.id]:next}};
+   try{
+    await dbPut('study_progress_v1',updated);studyProgress=updated;
+    button.textContent=next.needsReview?"Remove from revision list":"Mark this question for revision";
+    button.setAttribute("aria-pressed",String(next.needsReview));
+    statusBox.textContent=next.needsReview?"Saved to revision list.":"Removed from revision list.";
+   }catch(err){console.error(err);statusBox.textContent="Could not save revision flag. No change was recorded."}
+   finally{button.disabled=false}
+ };
 }
 function openRule(r){enterFocus();setScreen('<div class="reader">'+focusHeader()+'<div class="readerMeta">Rule - '+esc(r.topic||'')+'</div><h1 class="pageTitle">'+esc(r.title||r.id||'Rule')+'</h1>'+section('Core rule',r.rule,'rule')+section('When it applies',r.when,'')+section('Triggers',r.triggers,'')+section('Exception',r.exception,'')+section('Deadline',r.deadline,'')+section('Procedure',r.procedure,'')+section('Exam trap',r.trap,'trap')+section('Source',r.source,'')+section('Verification note',r.verify,'warning')+section('Detail',r.detail,'')+'</div>');bindBack()}
 function openDeadline(d){enterFocus();setScreen('<div class="reader">'+focusHeader()+'<div class="readerMeta">Deadline - '+esc(d.topic||'')+'</div><h1 class="pageTitle">'+esc(d.action||d.title||'Deadline')+'</h1>'+section('Deadline',d.deadline,'rule')+section('Starts from',d.start,'')+section('Exception',d.exception,'')+section('Consequence',d.consequence,'trap')+section('Source',d.source,'')+'</div>');bindBack()}
@@ -380,7 +419,7 @@ function renderData(){
  setScreen('<div class="dataPanel"><div class="eyebrow">Offline data</div><h1 class="pageTitle">Local content and revision progress</h1>'+
  '<p><strong>'+questionCount()+' questions</strong> are stored locally in IndexedDB on this iPad. No dataset or progress is sent to GitHub.</p>'+
  '<div class="paperStats"><div class="statPill"><strong>'+known+'</strong>lessons understood</div>'+
- '<div class="statPill"><strong>'+needs+'</strong>topics for revision</div><div class="statPill"><strong>'+questions.length+'</strong>questions attempted</div></div>'+
+ '<div class="statPill"><strong>'+needs+'</strong>topics for revision</div><div class="statPill"><strong>'+questions.filter(x=>Number(x.attempts||0)>0).length+'</strong>questions attempted</div></div>'+
  '<div class="dataActions"><button id="replaceData" class="primaryButton">Replace local dataset (backup first)</button>'+
  '<button id="backupData" class="secondaryButton">Export dataset backup</button>'+
  '<button id="exportProgress" class="secondaryButton">Export revision progress</button></div>'+
@@ -404,14 +443,19 @@ function renderProgress(){
   const all=asList(s.topics),understood=all.filter(t=>topics[t.id]?.state==="understood").length,
     weak=all.filter(t=>topics[t.id]?.state==="needs-review").length;
   const attempts=asList(s.questions).filter(q=>questions[q.id]);
-  const official=asList(s.questions).filter(q=>q.answer_status==="OFFICIAL"&&questions[q.id]);
-  const scored=official.reduce((n,q)=>n+(questions[q.id]?.officialCorrect||0),0);
-  const officialAttempts=official.reduce((n,q)=>n+(questions[q.id]?.attempts||0),0);
-  return '<section class="readSection"><h2>'+esc(s.subject)+'</h2><p>'+understood+'/'+all.length+' lessons understood; '+weak+' need revision. '+attempts.length+' questions attempted.'+
-   (officialAttempts?' Official-answer attempts: '+scored+'/'+officialAttempts+' matching the key.':"")+'</p></section>';
+  const official=asList(s.questions).filter(q=>q.answer_status==="OFFICIAL" &&
+    questions[q.id]?.questionRevision===questionRevision(q) &&
+    Object.keys(q.options||{}).length===4);
+  const scored=official.reduce((n,q)=>n+Number(questions[q.id]?.officialCorrect||0),0);
+  const officialAttempts=official.reduce((n,q)=>n+Number(questions[q.id]?.officialAttempts||0),0);
+  const flagged=asList(s.questions).filter(q=>questions[q.id]?.needsReview).length;
+  const unverified=asList(s.questions).filter(q=>questions[q.id]?.attempts && questions[q.id]?.questionRevision!==questionRevision(q)).length;
+  return '<section class="readSection"><h2>'+esc(s.subject)+'</h2><p>'+understood+'/'+all.length+' lessons understood; '+weak+' topics need revision; '+attempts.filter(q=>questions[q.id]?.attempts).length+' questions attempted; '+flagged+' questions marked for revision.'+
+   (officialAttempts?' Version-matched official-key attempts: '+scored+'/'+officialAttempts+'.':"")+
+   (unverified?' Earlier score history retained but unverified: '+unverified+' questions.':"")+'</p></section>';
  }).join("");
  setScreen('<div class="eyebrow">Revision progress · Paper '+paper+'</div><h1 class="pageTitle">What I understand and what to revise</h1>'+
- '<p class="pageLead">Only questions with official SILE answers contribute to scored accuracy. Derived-answer comparisons and unresolved questions are not counted as officially correct or incorrect.</p>'+
+ '<p class="pageLead">Scores include only attempts against an unchanged recorded official key and complete choices. Historical attempts without a matching answer version remain saved but unscored. The older legal-content dataset remains under NO-GO review.</p>'+
  summaries+'<div class="dataActions"><button class="secondaryButton" id="exportProgressPage">Export progress</button></div>');
  $('#exportProgressPage').onclick=exportStudyProgress;
 }
