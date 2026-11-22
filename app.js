@@ -435,5 +435,37 @@ function bindStatic(){
   document.addEventListener('keydown',e=>{if(e.key==='/'&&!/input|textarea/i.test(document.activeElement.tagName)){e.preventDefault();window.SILEFIND.render()}});
 }
 
-async function init(){await openDB();studyProgress=await dbGet('study_progress_v1')||{version:1,topics:{},questions:{}};DATA=await dbGet('dataset');if(DATA)flatten();if(window.SILETOOLS)await window.SILETOOLS.restore();updateStatus();renderSubjects();updateContext();bindStatic();if(DATA)renderPaperDashboard();else renderSetup();if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{})}
+function bootTimed(p, label) {
+  return Promise.race([p, new Promise((_, reject) => setTimeout(() => reject(new Error(label + ' timed out')), 12000))]);
+}
+async function init(){
+  try {
+    // Bind controls first; optional offline tools must not block main study UI.
+    bindStatic();
+    await bootTimed(openDB(), 'Opening offline storage');
+    studyProgress = await bootTimed(dbGet('study_progress_v1'), 'Reading revision progress') || {version:1,topics:{},questions:{}};
+    DATA = await bootTimed(dbGet('dataset'), 'Reading local study data');
+    if(DATA) flatten();
+    updateStatus();
+    renderSubjects();
+    updateContext();
+    if(DATA) renderPaperDashboard(); else renderSetup();
+    window.SILE_APP_READY = true;
+    try { sessionStorage.removeItem('sile_last_startup_error'); } catch (_) {}
+  } catch (err) {
+    console.error('SILE app startup', err);
+    window.SILE_APP_ERROR = String(err && err.message || err);
+    try { sessionStorage.setItem('sile_last_startup_error',window.SILE_APP_ERROR); } catch (_) {}
+    const msg = esc(window.SILE_APP_ERROR);
+    setScreen('<div class="dataPanel"><div class="eyebrow">Startup diagnostic</div><h1 class="pageTitle">Unable to start the study interface</h1>' +
+      '<p>The local study data and progress have not been deleted. Error: <strong>' + msg + '</strong></p>' +
+      '<p>Connect to Wi-Fi, then open <a href="diagnostic.html">SILE Diagnostics</a> to check the app. Do not delete the Home Screen app or clear website data.</p></div>');
+  } finally {
+    if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(err => console.error('SILE service worker', err));
+  }
+  // Restore nonessential private tools only AFTER the study interface is ready.
+  if(db && window.SILETOOLS) {
+    Promise.resolve().then(() => window.SILETOOLS.restore()).catch(err => console.error('SILE private tools restore', err));
+  }
+}
 init();
