@@ -74,7 +74,7 @@ async function run(){
  });
  await step("All related questions and opening Rapid reference",async()=>{
   await page.locator("#showAllRelated").click();
-  check(await page.locator('[data-question-index]').count()>12,"Show all related questions failed");
+  check((await page.locator('[data-question-index]').count())===323,"All 323 synthetic questions must be visible");
   await page.locator('[data-question-index]').first().click();
   await page.locator(".reader").waitFor();
   check((await page.locator(".reader").innerText()).includes("Recorded answer choices"),"Rapid question not opened");
