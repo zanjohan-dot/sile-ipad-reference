@@ -346,12 +346,12 @@ function openQuestion(q){
   $('#answerBlock').classList.add("revealed");
   $('#answerBlock').scrollIntoView({block:"nearest"});
  };
- $('#submitPractice').onclick=()=>{
+ $('#submitPractice').onclick=async()=>{
    const selected=document.querySelector('input[name="practiceChoice"]:checked');
    if(!selected){const feedback=$('#practiceFeedback');if(feedback)feedback.textContent="Choose an answer first, or reveal without recording.";return;}
-   void reveal(selected.value,true);
+   await reveal(selected.value,true);
  };
- $('#revealWithoutAttempt').onclick=()=>{void reveal("",false)};
+ $('#revealWithoutAttempt').onclick=async()=>{await reveal("",false)};
  $('#toggleQuestionReview').onclick=async()=>{
    const button=$('#toggleQuestionReview'),statusBox=$('#questionReviewStatus');
    button.disabled=true;
