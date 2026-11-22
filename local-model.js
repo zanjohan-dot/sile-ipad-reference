@@ -2,7 +2,7 @@
 (function(){
 "use strict";
 const runtime="https://esm.run/@mlc-ai/web-llm@0.2.86";
-const models=["SmolLM2-1.7B-Instruct-q4f16_1-MLC","SmolLM2-360M-Instruct-q4f16_1-MLC"];
+const models=["SmolLM2-360M-Instruct-q4f16_1-MLC","SmolLM2-1.7B-Instruct-q4f16_1-MLC","SmolLM2-360M-Instruct-q4f32_1-MLC"];
 let engine=null,loaded="",pending=null;
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -10,8 +10,8 @@ const tell=s=>{if($("modelStatus"))$("modelStatus").textContent=s};
 function panel(){
  const host=$("modelPanel");if(!host)return;
  host.innerHTML='<details class="readSection" id="modelSection"><summary><strong>Explain with local Search</strong> · Revision-only experimental model</summary>'+
- '<p>Install a quantised language model on this iPad, then ask Search to explain relevant legal material from your imported SILE sources. The first download needs internet; later use should be offline after verification.</p>'+
- '<label class="calcField"><span>Local model</span><select id="modelPick"><option value="'+models[0]+'">1.5B model · stronger, requires more memory</option><option value="'+models[1]+'">0.5B model · smaller, less reliable</option></select></label>'+
+ '<p>Search can explain your local SILE references using an on-device language model. Download a model once over Wi-Fi; afterwards, test Search with Wi-Fi disabled. The smallest model may struggle with nuanced legal reasoning.</p>'+
+ '<label class="calcField"><span>Local model</span><select id="modelPick"><option value="'+models[0]+'">360M compact model · fastest to install · experimental</option><option value="'+models[1]+'">1.7B model · more capable · about 1.7GB GPU memory</option><option value="'+models[2]+'">360M compatibility model · for devices without shader-f16</option></select></label>'+
  '<div class="studyActions"><button class="primaryButton" id="modelInstall">Download / load model</button><button class="secondaryButton" id="modelExplain">Explain retrieved material</button></div>'+
  '<p class="readerMeta" id="modelStatus">Model not loaded. Offline inference has NOT been verified on this device.</p>'+
  '<div id="modelAnswer" aria-live="polite"></div>'+
@@ -29,6 +29,12 @@ async function load(){
    if(!navigator.gpu)throw Error("WebGPU not available; unable to load local model.");
    const adapter=await navigator.gpu.requestAdapter();
    if(!adapter)throw Error("No usable WebGPU adapter.");
+   const f16=adapter.features?.has?.("shader-f16")===true;
+   if(id.includes("q4f16_1")&&!f16)throw Error("This model requires shader-f16, which your GPU does not expose. Select the 360M compatibility model.");
+   const storage=await navigator.storage?.estimate?.();
+   if(storage?.quota&&storage?.usage&&storage.quota-storage.usage<700*1024*1024)
+     throw Error("The browser reports less than 700 MB of free storage quota. Free space on the iPad before downloading a local model.");
+   await navigator.storage?.persist?.().catch(()=>false);
    tell("Loading local model runtime…");
    const w=await import(runtime);
    if(!w.prebuiltAppConfig?.model_list?.some(m=>m.model_id===id))throw Error("Model ID not supported by installed runtime");
@@ -37,7 +43,7 @@ async function load(){
      initProgressCallback:p=>{if(p?.text)tell(String(p.text))}
    });
    engine=e;loaded=id;
-   tell("Model loaded locally. Turn on airplane mode, fully close and reopen the installed app, and test Search again before calling it offline-ready.");
+   tell("Model loaded on this iPad. Generate a test explanation now, then switch to airplane mode, fully close and reopen the app, and repeat Search to verify offline use.");
    if($("modelExplain"))$("modelExplain").disabled=false;
    return engine;
  })().finally(()=>{pending=null});
