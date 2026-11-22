@@ -10,6 +10,15 @@
 <link rel="manifest" href="/sile-ipad-reference/manifest.webmanifest">
 <link rel="apple-touch-icon" sizes="180x180" href="/sile-ipad-reference/apple-touch-icon.png">
 <link rel="stylesheet" href="styles.css">
+<script>
+(function(){
+  function save(message){
+    try{sessionStorage.setItem('sile_last_startup_error',String(message).slice(0,240))}catch(e){}
+  }
+  window.addEventListener('error', function(e){save((e.message || 'Script loading error')+(e.filename?' ('+e.filename.split('/').pop()+')':''))});
+  window.addEventListener('unhandledrejection', function(e){save('Unhandled rejection: '+String(e.reason && e.reason.message || e.reason))});
+})();
+</script>
 <title>SILE Part B 2026</title>
 </head>
 <body>
@@ -53,6 +62,6 @@
 <script src="retrieval-enhancements.js" defer></script>
 <script src="local-model.js" defer></script>
 <script src="study-ux.js" defer></script>
-<script src="app.js" defer></script>
+<script src="app.js?build=20261123b" defer></script>
 </body>
 </html>
