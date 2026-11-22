@@ -127,6 +127,7 @@ function renderGenericList(s,type,items){
 function bindRows(){
   $$('.lessonCard').forEach(b=>b.onclick=()=>openLesson(b.dataset.topic));
   $$('.contentRow').forEach(b=>b.onclick=()=>{const s=currentSubject();const i=Number(b.dataset.index);const kind=b.dataset.kind;if(kind==='question')openQuestion(asList(s.questions)[i]);if(kind==='rule')openRule(asList(s.rules)[i]);if(kind==='deadline')openDeadline(asList(s.deadlines)[i]);if(kind==='procedure')openProcedure(asList(s.procedures)[i]);if(kind==='trap')openTrap(asList(s.traps)[i])});
+  if(window.SILETOOLS)window.SILETOOLS.bind();
 }
 
 function enterFocus(){previousView={subject,activeTab};document.body.classList.add('focusMode')}
@@ -160,12 +161,14 @@ function openLesson(topicId){
   bindBack();
 }
 
-function renderToolsContent(s){
-  const items=Object.entries((s.teach&&s.teach.calculators)||{});
-  if(!items.length)return '<div class="dataPanel"><h2>No calculator definitions for this subject</h2><p>Use the rules and procedure tabs for the subject reference material.</p></div>';
-  return '<div class="listHeader"><div><div class="eyebrow">'+esc(s.subject)+'</div><h2>Tools and calculators</h2></div><div class="listCount">'+items.length+' tools</div></div><div class="toolsGrid">'+items.map(([id,x])=>'<div class="toolCard"><div class="rowType">'+esc(id)+'</div><h3>'+esc(x.title||id)+'</h3><p>'+esc(x.why||x.interpret||'Decision aid from verified dataset.')+'</p></div>').join('')+'</div>';
+function renderToolsContent(s){return window.SILETOOLS?window.SILETOOLS.catalog(s.code):'<p>Private tools unavailable.</p>'}
+function renderTools(){
+ if(!DATA)return;
+ const s=currentSubject();if(s){activeTab='tools';renderSubjectDashboard();return}
+ const subs=DATA.subjects.filter(x=>x.paper===paper);
+ setScreen('<div class="paperHero"><div class="eyebrow">Private offline tools</div><h1 class="pageTitle">Calculators and guided legal tests</h1><p>Select a subject to access its locally installed calculators and decision trees. Private source data and formula code are not on GitHub.</p><div class="subjectGrid">'+subs.map(x=>'<button class="subjectCard" data-select-tools="'+esc(x.code)+'"><div class="subjectCardTitle">'+esc(x.subject)+'</div><div class="subjectCardMeta">Open subject tools</div></button>').join('')+'</div></div>');
+ $$('[data-select-tools]').forEach(b=>b.onclick=()=>{subject=b.dataset.selectTools;activeTab='tools';renderSubjects();updateContext();renderSubjectDashboard()});
 }
-function renderTools(){const s=currentSubject();if(s){activeTab='tools';renderSubjectDashboard();return}const subs=DATA.subjects.filter(x=>x.paper===paper);let cards='';subs.forEach(x=>{cards+='<section class="essentialBlock"><h3>'+esc(x.subject)+'</h3>'+renderToolsContent(x)+'</section>'});setScreen('<h1 class="pageTitle">Tools and calculators</h1>'+cards)}
 
 function renderSearch(){
   if(!DATA)return;
@@ -189,6 +192,8 @@ function bindStatic(){
   $$('[data-paper]').forEach(b=>b.onclick=()=>{paper=Number(b.dataset.paper);subject='';activeTab=mode==='learn'?'learn':'overview';document.body.classList.remove('focusMode');$$('[data-paper]').forEach(x=>x.classList.toggle('active',x===b));renderSubjects();updateContext();renderPaperDashboard()});
   $$('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;activeTab=mode==='learn'?'learn':'overview';document.body.classList.remove('focusMode');$$('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));updateContext();if(subject)renderSubjectDashboard();else renderPaperDashboard()});
   $('#searchBtn').onclick=()=>{document.body.classList.remove('focusMode');renderSearch()};
+  $('#stuckBtn').onclick=()=>window.SILEFIND.render();
+  $('#aiBtn').onclick=()=>window.SILEFIND.aiStatus();
   $('#statusBtn').onclick=()=>{document.body.classList.remove('focusMode');renderData()};
   $('#toolsBtn').onclick=()=>{if(DATA){document.body.classList.remove('focusMode');renderTools()}};
   $('#dataBtn').onclick=()=>{if(DATA){document.body.classList.remove('focusMode');renderData()}};
@@ -196,5 +201,5 @@ function bindStatic(){
   document.addEventListener('keydown',e=>{if(e.key==='/'&&!/input|textarea/i.test(document.activeElement.tagName)){e.preventDefault();renderSearch()}});
 }
 
-async function init(){await openDB();DATA=await dbGet('dataset');if(DATA)flatten();updateStatus();renderSubjects();updateContext();bindStatic();if(DATA)renderPaperDashboard();else renderSetup();if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{})}
+async function init(){await openDB();DATA=await dbGet('dataset');if(DATA)flatten();if(window.SILETOOLS)await window.SILETOOLS.restore();updateStatus();renderSubjects();updateContext();bindStatic();if(DATA)renderPaperDashboard();else renderSetup();if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{})}
 init();
