@@ -15,8 +15,8 @@ h1{margin-top:0}button{font:inherit;background:#1769aa;color:white;border:0;bord
 <body>
 <div class="card">
 <h1>Refresh SILE 2026</h1>
-<p>This resets the old app shell and service-worker cache. Your imported SILE dataset in IndexedDB is not deleted.</p>
-<button id="reset">Reset old app cache</button>
+<p>This refreshes the app shell while preserving your imported dataset, revision progress, private calculator engine and downloaded local model caches. It does not erase the SILE data in IndexedDB.</p>
+<button id="reset">Refresh app shell only</button>
 <div id="status">Ready.</div>
 </div>
 <script>
@@ -26,11 +26,11 @@ document.getElementById("reset").onclick=async()=>{
     s.textContent="Removing old service worker and cached shell…";
     if("serviceWorker"in navigator){
       const regs=await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map(r=>r.unregister()));
+      await Promise.all(regs.filter(r=>r.scope.includes("/sile-ipad-reference/")).map(r=>r.unregister()));
     }
     if("caches"in window){
       const keys=await caches.keys();
-      await Promise.all(keys.map(k=>caches.delete(k)));
+      await Promise.all(keys.filter(k=>/^(?:sile-study-v|sile-stage3-v|sile-shell-v)/.test(k)).map(k=>caches.delete(k)));
     }
     s.textContent="Reset complete. Opening current SILE build…";
     setTimeout(()=>location.replace("./?fresh="+Date.now()),500);

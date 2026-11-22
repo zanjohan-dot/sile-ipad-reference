@@ -4,9 +4,9 @@
 const STOP=new Set("the a an and or but on at in is are was were this that which what with from by to for as of it if can may should would then when where how why have has had be been into does do you your their they we such not only under section act rule company singapore person persons more less question correct following statement statements".split(" "));
 const E=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const tokens=s=>String(s||"").toLowerCase().match(/[a-z0-9]+(?:\.[0-9]+)?/g)?.filter(w=>w.length>1&&!STOP.has(w))||[];
-let lastText="",lastMatches=[],lastSubjectScope=true,lastAll=false;
+let lastText="",lastMatches=[],lastSubjectScope=false,lastAll=false;
 function open(it){
- subject=it.code;renderSubjects();updateContext();
+ subject=it.code;paper=it.paper;document.querySelectorAll("[data-paper]").forEach(b=>b.classList.toggle("active",Number(b.dataset.paper)===paper));renderSubjects();updateContext();
  if(it.type==="RULE")openRule(it.obj);
  else if(it.type==="DEADLINE")openDeadline(it.obj);
  else if(it.type==="TRAP")openTrap(it.obj);
@@ -50,21 +50,37 @@ function show(){
   }).slice(0,5);
   if(a.length)tools='<h2 class="sectionTitle">Matching calculators</h2><div class="toolLaunchGrid">'+a.map(c=>'<button class="toolLaunch" data-find-calc="'+E(c.id)+'"><strong>'+E(c.title)+'</strong><small>'+E(c.what).slice(0,180)+'</small></button>').join("")+'</div>';
  }
- box.innerHTML='<div class="listHeader"><div><div class="eyebrow">Ranked references · 8 Nov dataset</div><h2>Relevant references</h2></div><div class="listCount">'+lastMatches.length+' matches</div></div><div class="contentList">'+hits.map((x,i)=>'<button class="contentRow" data-find-index="'+i+'"><div class="rowTop"><span class="rowType">'+E(x.type)+'</span><span class="rowMeta">'+E(x.subject)+'</span></div><div class="rowTitle">'+E(x.title)+'</div><div class="rowExcerpt">'+E(x.text).slice(0,245)+'</div><div class="readerMeta">Matched terms: '+E(x.matched.join(" · "))+' · Retrieval score is not legal confidence</div><div class="sourceMeta">Source: '+E(x.obj?.source||x.obj?.authority||x.obj?.course_material||x.obj?.example?.source||"Check original material — exact citation not stored")+'+</div></button>').join("")+'</div>'+tools+'<div class="dataNote">Similar wording does not mean identical facts or the same answer. Verify each qualification, legal threshold and source. This feature does not generate answers.</div>';
+ box.innerHTML='<div class="listHeader"><div><div class="eyebrow">Ranked references · '+E(DATA.meta?.built||"imported dataset")+'</div><h2>Relevant references</h2></div><div class="listCount">'+lastMatches.length+' matches</div></div><div class="contentList">'+hits.map((x,i)=>'<button class="contentRow" data-find-index="'+i+'"><div class="rowTop"><span class="rowType">'+E(x.type)+'</span><span class="rowMeta">'+E(x.subject)+'</span></div><div class="rowTitle">'+E(x.title)+'</div><div class="rowExcerpt">'+E(x.text).slice(0,245)+'</div><div class="readerMeta">Matched terms: '+E(x.matched.join(" · "))+' · Retrieval score is not legal confidence</div><div class="sourceMeta">Source: '+E(x.obj?.source||x.obj?.authority||x.obj?.course_material||x.obj?.example?.source||"Check original material — exact citation not stored")+'</div></button>').join("")+'</div>'+tools+'<div class="dataNote">Similar wording does not mean identical facts or the same answer. Verify each qualification, legal threshold and source. This feature does not generate answers.</div>';
  document.querySelectorAll("[data-find-index]").forEach(el=>el.onclick=()=>open(hits[Number(el.dataset.findIndex)]));
  document.querySelectorAll("[data-find-calc]").forEach(el=>el.onclick=()=>window.SILETOOLS.openCalc(el.dataset.findCalc));
 }
 function render(preserve=false){
  if(!DATA)return;
  document.body.classList.remove("focusMode");
- if(!preserve){lastText="";lastAll=false;lastSubjectScope=true}
+ if(!preserve){lastText="";lastAll=false;lastSubjectScope=false}
  const rev=mode==="learn";
- setScreen('<div class="findPage"><div class="eyebrow">Local reference finder · '+(rev?"REVISION":"RAPID REFERENCE")+'</div><h1 class="pageTitle">Search verified reference material</h1><p class="pageLead">'+(rev?"For revision, paste practice facts or a question to retrieve relevant material. No answer is generated.":"Search reference terms and source passages. The SILE examination rules prohibit AI-powered search and answer-suggesting tools; verify what reference functions are permitted before any exam use.")+'</p><div class="searchPanel"><label class="findLabel" for="findQuery">Legal issue or key facts</label><textarea id="findQuery" rows="3" placeholder="e.g. 50 people private placement prospectus exemption"></textarea><div class="findControls"><label><input id="findSubjectOnly" type="checkbox" '+(lastSubjectScope?"checked":"")+'> This subject only</label><label><input id="findAllPapers" type="checkbox" '+(lastAll?"checked":"")+'> Include other paper</label><button id="findNow" class="primaryButton">Find references</button></div></div><div id="findResults" class="searchResults"></div></div>');
+ setScreen('<div class="findPage"><div class="eyebrow">Local reference finder · '+(rev?"REVISION":"RAPID REFERENCE")+'</div><h1 class="pageTitle">Search</h1><p class="pageLead">'+(rev?"Ask a question in everyday English. Search finds local source material first, then can explain it with the downloaded on-device model — no internet required after successful installation and caching.":"Look up rules, deadlines, procedures and source references quickly. This mode does not generate answers.")+'</p><div class="searchPanel"><label class="findLabel" for="findQuery">Legal issue or key facts</label><textarea id="findQuery" rows="3" placeholder="e.g. 50 people private placement prospectus exemption"></textarea><div class="findControls"><label><input id="findSubjectOnly" type="checkbox" '+(lastSubjectScope?"checked":"")+'> This subject only</label><label><input id="findAllPapers" type="checkbox" '+(lastAll?"checked":"")+'> Include other paper</label><button id="findNow" class="secondaryButton">Find sources</button>'+(rev?'<button id="findExplainNow" class="primaryButton">Find & explain</button>':'')+'</div></div><div id="findResults" class="searchResults"></div>'+(rev?'<div id="modelPanel" class="localSearchSetup"></div>':'')+'</div>');
  document.getElementById("findQuery").value=lastText;
  document.getElementById("findQuery").oninput=e=>{lastText=e.target.value};
  document.getElementById("findNow").onclick=show;
+ if(rev&&document.getElementById("findExplainNow")){
+   document.getElementById("findExplainNow").onclick=()=>{
+     show();
+     const ai=window.SILELOCALMODEL;
+     const details=document.getElementById("modelSection");
+     if(details)details.open=true;
+     if(!lastMatches.length)return;
+     if(ai?.ready)ai.explain();
+     else{
+       const status=document.getElementById("modelStatus");
+       if(status)status.textContent="A local model is not yet installed. Choose the compact model and tap Download / load model. Search sources are available below.";
+       details?.scrollIntoView({block:"nearest",behavior:"smooth"});
+     }
+   };
+ }
  document.getElementById("findSubjectOnly").onchange=e=>{lastSubjectScope=e.target.checked;show()};
  document.getElementById("findAllPapers").onchange=e=>{lastAll=e.target.checked;show()};
+ if(rev&&window.SILELOCALMODEL)window.SILELOCALMODEL.panel();
  if(lastText)show();
 }
 async function aiStatus(){
@@ -81,5 +97,5 @@ async function aiStatus(){
   }catch(e){box.textContent="Capability test failed: "+String(e)}
  };
 }
-window.SILEFIND={render,aiStatus,get lastMatches(){return lastMatches}};
+window.SILEFIND={render,aiStatus,refreshEvidence:(q)=>{if(typeof q==="string"){lastText=q;const el=document.getElementById("findQuery");if(el)el.value=q;}else{lastText=document.getElementById("findQuery")?.value?.trim()||lastText;}show();return lastMatches;},get lastMatches(){return lastMatches}};
 })();

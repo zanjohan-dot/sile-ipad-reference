@@ -12,6 +12,7 @@ let lastList=[];
 let previousView=null;
 let studyProgress={version:1,topics:{},questions:{}};
 let currentQuestion=null;
+let referenceCategory='RULE';
 
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
@@ -26,7 +27,7 @@ function setScreen(html){$('#screen').innerHTML='<div class="screenInner">'+html
 function currentSubject(){return DATA?DATA.subjects.find(s=>s.code===subject):null}
 function topicMeta(s,id){return asList(s&&s.topics).find(t=>t.id===id)||null}
 function questionCount(){return DATA?DATA.subjects.reduce((n,s)=>n+asList(s.questions).length,0):0}
-function updateStatus(){$('#statusBtn').textContent=DATA?'Offline - '+questionCount()+' questions':'No data'}
+function updateStatus(){$('#statusBtn').textContent=DATA?'Local data · '+questionCount()+' questions':'No local data'}
 function updateContext(){const s=currentSubject();const m=mode==='rapid'?'Rapid':'Learn';$('#contextLabel').textContent=s?'Paper '+paper+' - '+s.subject+' - '+m:'Paper '+paper+' - '+m}
 
 function flatten(){
@@ -64,7 +65,7 @@ function renderSubjects(){
   nav.appendChild(all);
   DATA.subjects.filter(s=>s.paper===paper).forEach(s=>{
     const b=document.createElement('button');b.textContent=s.subject;b.classList.toggle('active',s.code===subject);
-    b.onclick=()=>{subject=s.code;activeTab=mode==='learn'?'learn':'overview';document.body.classList.remove('focusMode');renderSubjects();updateContext();renderSubjectDashboard();document.body.classList.remove('navOpen')};
+    b.onclick=()=>{subject=s.code;activeTab='overview';document.body.classList.remove('focusMode');renderSubjects();updateContext();renderSubjectDashboard();document.body.classList.remove('navOpen')};
     nav.appendChild(b);
   });
 }
@@ -73,30 +74,108 @@ function paperStats(subs){return{q:subs.reduce((n,s)=>n+asList(s.questions).leng
 function subjectStats(s){return{q:asList(s.questions).length,r:asList(s.rules).length,d:asList(s.deadlines).length,t:asList(s.traps).length,l:asList(s.teach&&s.teach.topics).length}}
 
 function renderPaperDashboard(){
-  if(!DATA)return renderSetup();
-  const subs=DATA.subjects.filter(s=>s.paper===paper);const st=paperStats(subs);
-  let cards=subs.map(s=>{const x=subjectStats(s);return '<button class="subjectCard" data-subject="'+esc(s.code)+'"><div class="subjectCardTitle">'+esc(s.subject)+'</div><div class="subjectCardMeta">'+x.q+' questions - '+x.r+' rules - '+x.d+' deadlines</div></button>'}).join('');
-  setScreen('<div class="paperHero"><div class="eyebrow">Paper '+paper+'</div><h1 class="pageTitle">'+(mode==='rapid'?'Rapid reference':'Learning dashboard')+'</h1><p class="pageLead">'+(mode==='rapid'?'Choose a subject for exam essentials, questions, rules, deadlines and traps. Use Search only when you need to find something across the paper.':'Choose a subject to study topic-by-topic in a structured teaching view. Raw dataset objects are not shown in Learn mode.')+'</p><div class="paperStats"><div class="statPill"><strong>'+st.q+'</strong>questions</div><div class="statPill"><strong>'+st.r+'</strong>rules</div><div class="statPill"><strong>'+st.d+'</strong>deadlines</div><div class="statPill"><strong>'+st.t+'</strong>traps</div></div><div class="subjectGrid">'+cards+'</div></div>');
-  $$('.subjectCard').forEach(b=>b.onclick=()=>{subject=b.dataset.subject;activeTab=mode==='learn'?'learn':'overview';renderSubjects();updateContext();renderSubjectDashboard()});
+ if(!DATA)return renderSetup();
+ const subs=DATA.subjects.filter(s=>s.paper===paper),st=paperStats(subs);
+ if(mode==='learn'){
+  const totals=subs.reduce((a,s)=>{a.lessons+=asList(s.topics).length;a.done+=asList(s.topics).filter(t=>studyProgress.topics?.[t.id]?.state==='understood').length;return a;},{lessons:0,done:0});
+  const cards=subs.map(s=>{
+    const t=asList(s.topics),done=t.filter(x=>studyProgress.topics?.[x.id]?.state==='understood').length,
+      needs=t.filter(x=>studyProgress.topics?.[x.id]?.state==='needs-review').length;
+    const next=t.find(x=>studyProgress.topics?.[x.id]?.state!=='understood');
+    return '<button class="subjectCard learningSubjectCard" data-subject="'+esc(s.code)+'"><div class="rowType">STUDY SUBJECT</div>'+
+     '<div class="subjectCardTitle">'+esc(s.subject)+'</div><div class="subjectCardMeta">'+done+'/'+t.length+' topics marked understood · '+needs+' to review</div>'+
+     (next?'<div class="subjectNext">Next: '+esc(next.name||next.id)+'</div>':'<div class="subjectNext">Review and practise questions</div>')+'</button>';
+  }).join('');
+  setScreen('<div class="learnHome"><div class="eyebrow">Paper '+paper+' · Study mode</div>'+
+   '<h1 class="pageTitle">Learn from the beginning</h1>'+
+   '<p class="pageLead">Start with the everyday explanation, learn the legal rule, work through an example, then try practice questions. Study one topic at a time.</p>'+
+   '<div class="studyProgressTop"><div><strong>'+totals.done+' / '+totals.lessons+'</strong><span> topics marked understood</span></div>'+
+   '<div class="progressTrack" role="progressbar" aria-valuemin="0" aria-valuemax="'+totals.lessons+'" aria-valuenow="'+totals.done+'"><span style="width:'+(totals.lessons?Math.round(totals.done*100/totals.lessons):0)+'%"></span></div></div>'+
+   '<h2 class="sectionTitle">Choose your next subject</h2><div class="subjectGrid">'+cards+'</div></div>');
+ }else{
+  const cards=subs.map(s=>{const x=subjectStats(s);return '<button class="subjectCard" data-subject="'+esc(s.code)+'"><div class="rowType">QUICK REFERENCE</div>'+
+   '<div class="subjectCardTitle">'+esc(s.subject)+'</div><div class="subjectCardMeta">'+x.r+' rules · '+x.d+' deadlines · '+x.q+' question records</div></button>'}).join('');
+  setScreen('<div class="rapidHome"><div class="eyebrow">Paper '+paper+' · Rapid mode</div>'+
+   '<h1 class="pageTitle">Find the rule. Check the deadline.</h1><p class="pageLead">Use concise source material without opening a full lesson. Search by a key phrase or choose a subject for essential rules, deadlines and traps.</p>'+
+   '<button id="rapidSearchHome" class="primaryButton quickFind">Search this paper</button>'+
+   '<div class="paperStats"><div class="statPill"><strong>'+st.r+'</strong>rules</div>'+
+   '<div class="statPill"><strong>'+st.d+'</strong>deadlines</div>'+
+   '<div class="statPill"><strong>'+st.t+'</strong>traps</div>'+
+   '<div class="statPill"><strong>'+st.q+'</strong>question records</div></div>'+
+   '<h2 class="sectionTitle">Jump to a subject</h2><div class="subjectGrid">'+cards+'</div></div>');
+  $('#rapidSearchHome').onclick=()=>window.SILEFIND.render();
+ }
+ $$('.subjectCard[data-subject]').forEach(b=>b.onclick=()=>{
+   subject=b.dataset.subject;activeTab='overview';referenceCategory='RULE';
+   renderSubjects();updateContext();renderSubjectDashboard();document.body.classList.remove('navOpen');
+ });
+}
+function renderSubjectDashboard(){
+ const s=currentSubject();if(!s)return renderPaperDashboard();
+ const st=subjectStats(s);
+ const rapid=mode==='rapid';
+ const tabs=rapid?
+ [['overview','Essentials'],['rules','Rules'],['deadlines','Deadlines'],['procedures','Procedures'],['traps','Traps'],['questions','Question lookup'],['tools','Tools']]:
+ [['overview','My study plan'],['learn','Lessons'],['questions','Practice'],['reference','Reference'],['tools','Tools']];
+ if(!tabs.some(t=>t[0]===activeTab))activeTab='overview';
+ const tabHtml=tabs.map(t=>'<button data-tab="'+t[0]+'" class="'+(activeTab===t[0]?'active':'')+'" aria-current="'+(activeTab===t[0]?'page':'false')+'">'+t[1]+'</button>').join('');
+ let body='';
+ if(activeTab==='overview')body=rapid?renderRapidEssentials(s):renderLearningPlan(s);
+ if(activeTab==='learn')body=renderLearnList(s);
+ if(activeTab==='questions')body=renderQuestionList(s);
+ if(activeTab==='reference')body=renderReferenceHub(s);
+ if(activeTab==='rules')body=renderGenericList(s,'RULE',asList(s.rules));
+ if(activeTab==='deadlines')body=renderGenericList(s,'DEADLINE',asList(s.deadlines));
+ if(activeTab==='procedures')body=renderGenericList(s,'PROCEDURE',asList(s.procedures));
+ if(activeTab==='traps')body=renderGenericList(s,'TRAP',asList(s.traps));
+ if(activeTab==='tools')body=renderToolsContent(s);
+ setScreen('<div class="subjectHeader '+(rapid?'rapidSubject':'learningSubject')+'"><div class="subjectHeaderTop"><div>'+
+  '<div class="eyebrow">Paper '+paper+' / '+(rapid?'Fast reference':'Beginner study')+'</div>'+
+  '<h1 class="pageTitle">'+esc(s.subject)+'</h1><p class="pageLead">'+
+  (rapid?'Find a verified rule or procedure quickly; citations and answer provenance remain visible.':
+   'One topic at a time: understand the idea, see the example, check yourself and practise.')+
+  '</p></div><div class="subjectStats"><div class="statPill"><strong>'+(rapid?st.r:st.l)+'</strong>'+(rapid?'rules':'lessons')+'</div>'+
+  '<div class="statPill"><strong>'+st.q+'</strong>questions</div></div></div>'+
+  '<div class="tabBar" role="navigation" aria-label="'+(rapid?'Rapid reference':'Learning')+' sections">'+tabHtml+'</div></div>'+body);
+ $$('.tabBar button').forEach(b=>b.onclick=()=>{activeTab=b.dataset.tab;renderSubjectDashboard()});
+ $$('[data-nav-tab]').forEach(b=>b.onclick=()=>{activeTab=b.dataset.navTab;renderSubjectDashboard()});
+ $$('[data-start-lesson]').forEach(b=>b.onclick=()=>openLesson(b.dataset.startLesson));
+ $$('[data-ref-category]').forEach(b=>b.onclick=()=>{referenceCategory=b.dataset.refCategory;renderSubjectDashboard()});
+ const rs=$('#subjectSearchNow');if(rs)rs.onclick=()=>window.SILEFIND.render();
+ bindRows();
 }
 
-function renderSubjectDashboard(){
-  const s=currentSubject();if(!s)return renderPaperDashboard();
-  const st=subjectStats(s);
-  const tabs=[['overview','Overview'],['learn','Learn'],['questions','Questions'],['rules','Rules'],['deadlines','Deadlines'],['procedures','Procedures'],['traps','Traps'],['tools','Tools']];
-  let tabHtml=tabs.map(t=>'<button data-tab="'+t[0]+'" class="'+(activeTab===t[0]?'active':'')+'">'+t[1]+'</button>').join('');
-  let body='';
-  if(activeTab==='overview')body=renderSubjectOverview(s);
-  if(activeTab==='learn')body=renderLearnList(s);
-  if(activeTab==='questions')body=renderQuestionList(s);
-  if(activeTab==='rules')body=renderGenericList(s,'RULE',asList(s.rules));
-  if(activeTab==='deadlines')body=renderGenericList(s,'DEADLINE',asList(s.deadlines));
-  if(activeTab==='procedures')body=renderGenericList(s,'PROCEDURE',asList(s.procedures));
-  if(activeTab==='traps')body=renderGenericList(s,'TRAP',asList(s.traps));
-  if(activeTab==='tools')body=renderToolsContent(s);
-  setScreen('<div class="subjectHeader"><div class="subjectHeaderTop"><div><div class="eyebrow">Paper '+paper+'</div><h1 class="pageTitle">'+esc(s.subject)+'</h1><p class="pageLead">'+(mode==='rapid'?'Exam-focused reference. Start with Overview, then jump directly to questions, rules, deadlines or traps.':'Structured study mode. Start with Learn, then test yourself using Questions.')+'</p></div><div class="subjectStats"><div class="statPill"><strong>'+st.q+'</strong>questions</div><div class="statPill"><strong>'+st.l+'</strong>lessons</div></div></div><div class="tabBar">'+tabHtml+'</div></div>'+body);
-  $$('.tabBar button').forEach(b=>b.onclick=()=>{activeTab=b.dataset.tab;renderSubjectDashboard()});
-  bindRows();
+function renderRapidEssentials(s){
+ return '<div class="modeIntro quickMode"><div class="eyebrow">Rapid reference · concise facts</div>'+
+ '<h2>Get to the point</h2><p>No lessons or progress tracking in this mode. Go directly to the rule, relevant deadline, procedure or exam trap.</p>'+
+ '<button class="primaryButton" id="subjectSearchNow">Search within '+esc(s.subject)+'</button></div>'+
+ renderSubjectOverview(s);
+}
+function renderLearningPlan(s){
+ const topics=asList(s.topics),done=topics.filter(t=>studyProgress.topics?.[t.id]?.state==='understood'),
+ weak=topics.filter(t=>studyProgress.topics?.[t.id]?.state==='needs-review'),
+ next=weak[0]||topics.find(t=>studyProgress.topics?.[t.id]?.state!=='understood')||topics[0];
+ const count=topics.length,percent=count?Math.round(100*done.length/count):0;
+ return '<div class="modeIntro learnMode"><div class="eyebrow">Learn · start from zero</div>'+
+ '<h2>Understand → Example → Check yourself → Practise</h2>'+
+ '<p>You do not need prior knowledge. Each topic starts with everyday English before introducing legal terms, rules and exam questions.</p>'+
+ '<div class="studyProgressTop"><strong>'+done.length+'/'+count+' topics understood</strong>'+
+ '<div class="progressTrack" role="progressbar" aria-valuemin="0" aria-valuemax="'+count+'" aria-valuenow="'+done.length+'"><span style="width:'+percent+'%"></span></div>'+
+ (weak.length?'<span class="reviewCount">'+weak.length+' topics marked for revision</span>':'')+'</div>'+
+ (next?'<div class="nextLesson"><div class="eyebrow">'+(weak.length?'Review this topic':'Start or continue here')+'</div>'+
+ '<h3>'+esc(next.name||next.id)+'</h3><p>'+esc(s.teach?.topics?.[next.id]?.big_picture||'Open this topic to start learning from the beginning.')+'</p>'+
+ '<button class="primaryButton" data-start-lesson="'+esc(next.id)+'">Start lesson</button></div>':'<p>No lessons in this subject.</p>')+
+ '</div><div class="learningShortcuts"><button data-nav-tab="learn" class="learnShortcut"><strong>Study all lessons</strong><small>Plain-English lessons with examples</small></button>'+
+ '<button data-nav-tab="questions" class="learnShortcut"><strong>Practice questions</strong><small>Choose an answer, then learn from the explanation</small></button>'+
+ '<button data-nav-tab="reference" class="learnShortcut"><strong>Look up the law</strong><small>Rules, deadlines, procedures and traps</small></button></div>';
+}
+function renderReferenceHub(s){
+ const types=[['RULE','Rules',s.rules],['DEADLINE','Deadlines',s.deadlines],['PROCEDURE','Procedures',s.procedures],['TRAP','Exam traps',s.traps]];
+ const current=types.find(x=>x[0]===referenceCategory)||types[0];
+ return '<div class="listHeader"><div><div class="eyebrow">Learn · Supporting reference</div><h2>Explore the source material</h2></div></div>'+
+ '<p class="pageLead">Read the lesson first if the legal terminology is unfamiliar. Use this library to verify specific rules and exceptions.</p>'+
+ '<div class="referenceFilters">'+types.map(([key,label,list])=>'<button data-ref-category="'+key+'" class="'+(current[0]===key?'active':'')+'">'+label+' ('+asList(list).length+')</button>').join('')+'</div>'+
+ renderGenericList(s,current[0],asList(current[2]));
 }
 
 function renderSubjectOverview(s){
@@ -169,7 +248,30 @@ function focusHeader(){return '<div class="focusHeader"><button id="backBtn" cla
 function bindBack(){$('#backBtn').onclick=exitFocus}
 function section(title,content,cls){if(content==null||content===''||(Array.isArray(content)&&!content.length))return'';let body=Array.isArray(content)?'<ul class="bulletList">'+content.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'<p>'+esc(content)+'</p>';return '<section class="readSection '+(cls||'')+'"><h2>'+esc(title)+'</h2>'+body+'</section>'}
 
+function renderRapidQuestion(q){
+ const status=String(q.answer_status||"").toUpperCase();
+ const incomplete=Object.keys(q.options||{}).length!==4;
+ const answer=status.includes("UNRESOLVED")?"No settled answer — not scored":(q.answer||"No answer verified");
+ const opts=Object.entries(q.options||{}).map(([k,v])=>'<div class="optionBox"><strong>'+esc(k)+'.</strong> '+esc(v)+'</div>').join("");
+ enterFocus();
+ setScreen('<div class="reader">'+focusHeader()+
+ '<div class="readerMeta">Rapid question reference · '+esc(q.sitting||q.category||"Source question")+'</div>'+
+ '<h1 class="pageTitle">'+esc((q.label||"Question")+(q.qno?" · Q"+q.qno:""))+'</h1>'+
+ '<div class="provenanceStrip">'+provenanceBadges(q)+'</div>'+
+ (incomplete?'<div class="dataNote"><strong>Source review needed:</strong> this question has '+Object.keys(q.options||{}).length+' recorded options. Verify against the original question before relying on the answer.</div>':"")+
+ section("Question",q.stem,"rule")+
+ '<section class="readSection"><h2>Recorded answer choices</h2><div class="optionList">'+opts+'</div></section>'+
+ section("Answer status / recorded key",answer,"answer")+
+ section("Rule tested",q.tested_rule,"rule")+
+ section("Reasoning",q.explanation||q.official_explanation)+
+ section("Exam trap",q.trap,"trap")+
+ section("Answer basis",q.answer_basis,"warning")+
+ section("Legal authority",q.authority)+section("Course material",q.course_material)+
+ '<div class="dataNote">For attempt tracking and self-testing, switch to Learn → Practice. The recorded answer can be derived or unresolved; refer to its provenance.</div></div>');
+ bindBack();
+}
 function openQuestion(q){
+ if(mode==='rapid')return renderRapidQuestion(q);
  currentQuestion=q;
  enterFocus();
  const opts=Object.entries(q.options||{}).map(([k,v])=>'<div class="optionBox"><strong>'+esc(k)+'.</strong> '+esc(v)+'</div>').join("");
@@ -177,6 +279,7 @@ function openQuestion(q){
   '<div class="conceptCard"><div class="conceptTerm">Option '+esc(k)+'</div><div class="conceptPlain">'+esc(v)+'</div></div>').join("");
  const status=String(q.answer_status||"").toUpperCase();
  const safeAnswer=status.includes("UNRESOLVED")?"No settled answer — not scored":(q.answer||"No settled answer");
+ const incompleteOptions=Object.keys(q.options||{}).length!==4;
  const answer='<div id="answerBlock" class="hiddenAnswer">'+
  section("Answer",safeAnswer,"answer")+
  section("What is this question really testing?",q.really_testing||q.tested_rule,"rule")+
@@ -192,7 +295,7 @@ function openQuestion(q){
   '<div class="readerMeta">Revision practice · '+esc(q.sitting||q.category||"Question")+'</div>'+
   '<h1 class="pageTitle">'+esc((q.label||"Question")+(q.qno?" · Q"+q.qno:""))+'</h1>'+
   '<div class="provenanceStrip">'+provenanceBadges(q)+'</div>'+
-  '<div class="dataNote">Practice using source questions only. Do not copy or save live examination questions.</div>'+
+  '<div class="dataNote">'+(incompleteOptions?'Source verification needed: answer options may be incomplete and this attempt will not count as official-key accuracy.':'Practice using source questions only; the recorded answer may require later reconciliation.')+'</div>'+
   section("Question",q.stem,"rule")+
   '<section class="readSection"><h2>Choose your answer</h2>'+window.SILEUX.questionAttemptUI(q,attempt)+'</section>'+
   answer+'</div>');
@@ -200,7 +303,7 @@ function openQuestion(q){
  const reveal=(selected,record)=>{
   if(record&&selected){
    const old=studyProgress.questions[q.id]||{attempts:0,officialCorrect:0};
-   const official=status==="OFFICIAL";
+   const official=status==="OFFICIAL"&&Object.keys(q.options||{}).length===4;
    studyProgress.questions[q.id]={
      attempts:old.attempts+1,officialCorrect:old.officialCorrect+(official&&selected===q.answer?1:0),
      lastSelected:selected,lastStatus:status,lastAttempt:new Date().toISOString()
@@ -279,7 +382,7 @@ function renderData(){
  '<label class="calcField"><span>Restore revision progress from backup</span><input id="progressImport" type="file" accept=".json,application/json"></label>'+
  '<div class="dataNote"><strong>Legal-content release warning:</strong> The imported 8 November dataset predates the final Taxation Contact Session and later answer-status audits. Do not mistake local availability for legal-content certification.</div>'+
  '<div class="dataNote"><strong>Exam rules:</strong> The SILE examination brief prohibits AI-powered search engines and answer-generating applications during the examinations. This app is a revision system; any exam use requires checking the permitted reference-material rules.</div>'+
- '<p class="readerMeta">Search runs locally over existing material; a language model and semantic embeddings are not installed or verified in this build.</p></div>');
+ '<p class="readerMeta">The Search page can install an optional on-device explanation model for revision. Its offline relaunch has not been verified on this iPad. Semantic-embedding retrieval is not installed.</p></div>');
  $('#replaceData').onclick=()=>$('#fileInput').click();
  $('#backupData').onclick=backup;$('#exportProgress').onclick=exportStudyProgress;
  $('#progressImport').onchange=async e=>{
@@ -313,12 +416,12 @@ function exportStudyProgress(){
 }
 function renderSetup(){setScreen('<div class="dataPanel"><div class="eyebrow">Setup</div><h1 class="pageTitle">Import verified SILE data</h1><p>Import the verified JSON once. The dataset is then stored locally on this iPad.</p><div class="dataActions"><button id="importNow" class="primaryButton">Choose JSON file</button></div></div>');$('#importNow').onclick=()=>$('#fileInput').click()}
 
-async function importFile(file){const o=JSON.parse(await file.text());if(!Array.isArray(o.subjects)||o.subjects.length!==8)throw new Error('Expected 8-subject SILE dataset');const q=o.subjects.reduce((n,s)=>n+asList(s.questions).length,0);if(q!==323)throw new Error('Expected 323 questions, found '+q);await dbPut('dataset',o);DATA=o;flatten();subject='';activeTab=mode==='learn'?'learn':'overview';updateStatus();renderSubjects();updateContext();renderPaperDashboard();toast('Verified dataset stored locally')}
+async function importFile(file){const o=JSON.parse(await file.text());if(!Array.isArray(o.subjects)||o.subjects.length!==8)throw new Error('Expected 8-subject SILE dataset');const q=o.subjects.reduce((n,s)=>n+asList(s.questions).length,0);if(q!==323)throw new Error('Expected 323 questions, found '+q);await dbPut('dataset',o);DATA=o;flatten();subject='';activeTab='overview';updateStatus();renderSubjects();updateContext();renderPaperDashboard();toast('Verified dataset stored locally')}
 async function backup(){if(!DATA)return;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(DATA)],{type:'application/json'}));a.download='SILE_iPad_dataset_backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 
 function bindStatic(){
-  $$('[data-paper]').forEach(b=>b.onclick=()=>{paper=Number(b.dataset.paper);subject='';activeTab=mode==='learn'?'learn':'overview';document.body.classList.remove('focusMode');$$('[data-paper]').forEach(x=>x.classList.toggle('active',x===b));renderSubjects();updateContext();renderPaperDashboard();document.body.classList.remove('navOpen')});
-  $('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;activeTab=mode==='learn'?'learn':'overview';document.body.classList.remove('focusMode');$$('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));updateContext();if(subject)renderSubjectDashboard();else renderPaperDashboard()});
+  $$('[data-paper]').forEach(b=>b.onclick=()=>{paper=Number(b.dataset.paper);subject='';activeTab='overview';document.body.classList.remove('focusMode');$$('[data-paper]').forEach(x=>x.classList.toggle('active',x===b));renderSubjects();updateContext();renderPaperDashboard();document.body.classList.remove('navOpen')});
+  $('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;activeTab='overview';referenceCategory='RULE';document.body.classList.remove('focusMode');$$('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));updateContext();if(subject)renderSubjectDashboard();else renderPaperDashboard()});
   $('#searchBtn').onclick=()=>{document.body.classList.remove('focusMode');window.SILEFIND.render()};
   const navToggle=$('#navToggle');navToggle.onclick=()=>{
     document.body.classList.toggle('navOpen');

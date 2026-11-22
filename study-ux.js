@@ -88,7 +88,7 @@ function interpretation(q,selected){
  const status=(q.answer_status||"").toUpperCase();
  if(status.includes("UNRESOLVED"))return "Unresolved question — not scored. Review the source conflict and legal reasoning.";
  if(!selected)return "Explanation revealed without recording an attempt.";
- if(status==="OFFICIAL")return selected===q.answer?"Matches the official answer.":"Does not match the official answer. Review why.";
+ if(status==="OFFICIAL"){if(Object.keys(q.options||{}).length!==4)return "Option list requires source review. Not scored.";return selected===q.answer?"Matches the recorded official key.":"Does not match the recorded official key. Review why.";}
  if(status==="DERIVED")return selected===q.answer?"Matches the derived answer (not an official key).":"Differs from the derived answer; this is not an official grading result.";
  return "Answer status requires verification.";
 }
