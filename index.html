@@ -14,6 +14,7 @@
 </head>
 <body>
 <header class="appHeader">
+  <button id="navToggle" class="navToggle" aria-label="Show or hide subject navigation" aria-expanded="false">☰</button>
   <div class="brandBlock">
     <div class="brandTitle">SILE Part B 2026</div>
     <div id="contextLabel" class="brandContext">Offline reference</div>
@@ -22,9 +23,7 @@
     <button data-mode="rapid" class="active">Rapid</button>
     <button data-mode="learn">Learn</button>
   </div>
-  <button id="stuckBtn" class="headerAction urgentAction">Stuck? Find rule</button>
-  <button id="searchBtn" class="headerAction">Search</button>
-  <button id="aiBtn" class="headerAction secondaryAction">AI status</button>
+  <button id="searchBtn" class="headerAction urgentAction">Search</button>
   <button id="statusBtn" class="offlineBadge">No data</button>
 </header>
 
@@ -38,6 +37,7 @@
     <nav id="subjects" class="subjectNav"></nav>
     <div class="sideFooter">
       <button id="toolsBtn" class="sideUtility">Tools</button>
+      <button id="progressBtn" class="sideUtility">My revision progress</button>
       <button id="dataBtn" class="sideUtility">Offline data</button>
     </div>
   </aside>
@@ -51,6 +51,7 @@
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script src="tools-enhancements.js" defer></script>
 <script src="retrieval-enhancements.js" defer></script>
+<script src="study-ux.js" defer></script>
 <script src="app.js" defer></script>
 </body>
 </html>
