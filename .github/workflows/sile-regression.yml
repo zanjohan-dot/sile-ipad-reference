@@ -28,3 +28,23 @@ jobs:
           node tests/worker-offline.test.js
           node tests/import-validation.test.js
           node tests/practice-persistence.test.js
+      - name: Package public application shell for browser verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: sile-static-candidate
+          retention-days: 2
+          path: |
+            index.html
+            styles.css
+            app.js
+            retrieval-enhancements.js
+            local-model.js
+            study-ux.js
+            tools-enhancements.js
+            sw.js
+            reset.html
+            diagnostic.html
+            manifest.webmanifest
+            icon-192.png
+            icon-512.png
+            apple-touch-icon.png
