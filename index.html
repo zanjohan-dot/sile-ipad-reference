@@ -1,11 +1,67 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#15324a"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="SILE 2026"><link rel="manifest" href="/sile-ipad-reference/manifest.webmanifest"><link rel="apple-touch-icon" sizes="180x180" href="/sile-ipad-reference/apple-touch-icon.png"><link rel="stylesheet" href="styles.css"><title>SILE iPad Reference</title></head><body>
-<a class="skip" href="#main">Skip to content</a>
-<header class="topbar"><button id="menuBtn" class="iconbtn" aria-label="Toggle subject navigation">☰</button><div class="brand"><b>SILE Part B 2026</b><span id="paperLabel">Offline reference • Build 2026-11-22.5</span></div><div class="mode" role="group" aria-label="Mode"><button data-mode="rapid" class="active">Rapid</button><button data-mode="learn">Learn</button></div><button id="statusBtn" class="status" aria-label="Offline data status">No data</button></header>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#15324a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="SILE 2026">
+<link rel="manifest" href="/sile-ipad-reference/manifest.webmanifest">
+<link rel="apple-touch-icon" sizes="180x180" href="/sile-ipad-reference/apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css">
+<title>SILE Part B 2026</title>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><b>SILE Part B 2026</b><span id="contextLabel">Offline reference</span></div>
+  <div class="mode" aria-label="Study mode">
+    <button data-mode="rapid" class="active">Rapid</button>
+    <button data-mode="learn">Learn</button>
+  </div>
+  <button id="statusBtn" class="status">No data</button>
+</header>
+
 <div class="layout">
-<aside id="sidebar" class="sidebar" aria-label="Subjects"><div class="paperTabs"><button data-paper="1" class="active">Paper 1</button><button data-paper="2">Paper 2</button></div><nav id="subjects"></nav><div class="sideActions"><button id="toolsBtn">Tools & calculators</button><div class="nativeUpload"><span>Import verified data</span><input id="fileInputSide" type="file"></div><button id="backupBtn">Export backup</button></div></aside>
-<section class="resultsPane"><div class="searchWrap"><label for="search">Search verified SILE material</label><input id="search" type="search" autocomplete="off" placeholder="Rule, section, deadline, question, trap…"><div class="filters"><select id="typeFilter" aria-label="Result type"><option value="">All types</option><option>RULE</option><option>DEADLINE</option><option>PROCEDURE</option><option>QUESTION</option><option>TRAP</option><option>OPEN ISSUE</option><option>LESSON</option></select><label><input id="paperOnly" type="checkbox" checked> Current paper only</label></div></div><div id="resultsMeta" class="resultsMeta"></div><div id="results" class="results" role="listbox" aria-label="Search results"></div></section>
-<main id="main" class="detail" tabindex="-1"><div id="welcome" class="welcome"><h1>Offline SILE reference</h1><p>This shell does not contain your SILE corpus until you import the verified data pack. After import, the data is stored locally in this browser.</p><div class="nativeUpload primary"><span>Import verified data pack</span><input id="fileInputMain" type="file"></div><div id="importStatus" class="importStatus">No data imported</div><div class="notice"><b>Exam use:</b> AI and answer-suggestion functions are not enabled in this build. The strict reference workflow remains separate.</div></div><article id="content" hidden></article></main>
+  <aside class="sidebar">
+    <div class="paperTabs">
+      <button data-paper="1" class="active">Paper 1</button>
+      <button data-paper="2">Paper 2</button>
+    </div>
+
+    <div class="navLabel">Subjects</div>
+    <nav id="subjects"></nav>
+
+    <div class="sideActions">
+      <button id="toolsBtn">Tools & calculators</button>
+      <button id="dataBtn">Data & offline status</button>
+    </div>
+  </aside>
+
+  <section class="resultsPane">
+    <div class="searchWrap">
+      <label for="search">Search this paper</label>
+      <input id="search" type="search" autocomplete="off" placeholder="Search rule, section, deadline, question, trap…">
+      <div class="filters">
+        <button data-filter="" class="filterChip active">All</button>
+        <button data-filter="RULE" class="filterChip">Rules</button>
+        <button data-filter="QUESTION" class="filterChip">Questions</button>
+        <button data-filter="DEADLINE" class="filterChip">Deadlines</button>
+        <button data-filter="TRAP" class="filterChip">Traps</button>
+      </div>
+    </div>
+    <div id="resultsMeta" class="resultsMeta"></div>
+    <div id="results" class="results"></div>
+  </section>
+
+  <main id="main" class="detail">
+    <section id="emptyState" class="emptyState"></section>
+    <article id="content" hidden></article>
+  </main>
 </div>
 
+<input id="fileInput" type="file" accept="application/json,.json" hidden>
 <div id="toast" role="status" aria-live="polite"></div>
-<script src="app.js" defer></script></body></html>
+<script src="app.js" defer></script>
+</body>
+</html>
