@@ -1,7 +1,7 @@
 /* SILE app shell. Preserve unrelated caches, including private WebLLM model weights. */
-const CACHE="sile-study-v16";
+const CACHE="sile-study-v17";
 const RUNTIME_CACHE="sile-local-runtime-v1";
-const ASSETS=["./","./index.html","./styles.css","./app.js","./study-ux.js","./tools-enhancements.js","./retrieval-enhancements.js","./local-model.js","./manifest.webmanifest","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
+const ASSETS=["./","./index.html","./styles.css","./app.js","./study-ux.js","./tools-enhancements.js","./retrieval-enhancements.js","./local-model.js","./diagnostic.html","./manifest.webmanifest","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
 const OWNED_CACHE=/^(?:sile-study-v|sile-stage3-v|sile-shell-v)/;
 self.addEventListener("install",event=>event.waitUntil(
  caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting())
