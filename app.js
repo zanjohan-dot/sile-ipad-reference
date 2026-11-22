@@ -381,7 +381,7 @@ function renderData(){
  '<p><strong>'+questionCount()+' questions</strong> are stored locally in IndexedDB on this iPad. No dataset or progress is sent to GitHub.</p>'+
  '<div class="paperStats"><div class="statPill"><strong>'+known+'</strong>lessons understood</div>'+
  '<div class="statPill"><strong>'+needs+'</strong>topics for revision</div><div class="statPill"><strong>'+questions.length+'</strong>questions attempted</div></div>'+
- '<div class="dataActions"><button id="replaceData" class="primaryButton">Replace verified JSON</button>'+
+ '<div class="dataActions"><button id="replaceData" class="primaryButton">Replace local dataset (backup first)</button>'+
  '<button id="backupData" class="secondaryButton">Export dataset backup</button>'+
  '<button id="exportProgress" class="secondaryButton">Export revision progress</button></div>'+
  '<label class="calcField"><span>Restore revision progress from backup</span><input id="progressImport" type="file" accept=".json,application/json"></label>'+
@@ -419,9 +419,44 @@ function exportStudyProgress(){
  const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(studyProgress,null,2)],{type:"application/json"}));
  a.href=url;a.download="SILE_Revision_Progress_2026.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1500);
 }
-function renderSetup(){setScreen('<div class="dataPanel"><div class="eyebrow">Setup</div><h1 class="pageTitle">Import verified SILE data</h1><p>Import the verified JSON once. The dataset is then stored locally on this iPad.</p><div class="dataActions"><button id="importNow" class="primaryButton">Choose JSON file</button></div></div>');$('#importNow').onclick=()=>$('#fileInput').click()}
+function renderSetup(){setScreen('<div class="dataPanel"><div class="eyebrow">Setup</div><h1 class="pageTitle">Import structured SILE study data</h1><p>Import structured JSON from your private source once. The dataset is then stored locally on this iPad.</p><div class="dataActions"><button id="importNow" class="primaryButton">Choose JSON file</button></div></div>');$('#importNow').onclick=()=>$('#fileInput').click()}
 
-async function importFile(file){const o=JSON.parse(await file.text());if(!Array.isArray(o.subjects)||o.subjects.length!==8)throw new Error('Expected 8-subject SILE dataset');const q=o.subjects.reduce((n,s)=>n+asList(s.questions).length,0);if(q!==323)throw new Error('Expected 323 questions, found '+q);await dbPut('dataset',o);DATA=o;flatten();subject='';activeTab='overview';updateStatus();renderSubjects();updateContext();renderPaperDashboard();toast('Verified dataset stored locally')}
+function validateImportedDataset(o){
+ if(!o||!Array.isArray(o.subjects)||o.subjects.length!==8)throw new Error("Expected eight subject records");
+ const subjectIds=new Set(),questionIds=new Set();let count=0;
+ for(const s of o.subjects){
+  if(!s||typeof s.code!=="string"||!s.code||subjectIds.has(s.code)||![1,2].includes(s.paper)||
+     typeof s.subject!=="string"||!Array.isArray(s.questions)||!Array.isArray(s.topics)||
+     !Array.isArray(s.rules)||!Array.isArray(s.deadlines)||!Array.isArray(s.procedures)||!Array.isArray(s.traps))
+   throw new Error("Invalid or duplicate subject data");
+  subjectIds.add(s.code);
+  const topics=new Set(s.topics.map(t=>t?.id));
+  for(const q of s.questions){
+   count++;
+   if(!q||typeof q.id!=="string"||!q.id||questionIds.has(q.id)||
+      typeof q.stem!=="string"||!q.stem.trim()||
+      !q.options||typeof q.options!=="object"||Array.isArray(q.options)||
+      Object.keys(q.options).length<3||Object.values(q.options).some(v=>typeof v!=="string")||
+      !["OFFICIAL","DERIVED","UNRESOLVED","EXCLUDED"].includes(q.answer_status)||
+      (q.topic&&!topics.has(q.topic))||
+      (["OFFICIAL","DERIVED"].includes(q.answer_status)&&typeof q.answer!=="string"))
+    throw new Error("Invalid question, answer status or topic reference: "+(q?.id||"unknown"));
+   questionIds.add(q.id);
+  }
+ }
+ if(count!==323)throw new Error("Expected 323 questions, found "+count);
+ return {subjects:subjectIds.size,questions:count};
+}
+async function importFile(file){
+ const o=JSON.parse(await file.text());
+ validateImportedDataset(o);
+ if(DATA&&typeof window.confirm==="function"&&!window.confirm(
+   "Replace the existing local SILE dataset? First export a dataset backup under Offline data. This action does not reset your progress, but old scores may need review after an answer-status change."))return;
+ await dbPut("dataset",o);
+ DATA=o;flatten();subject="";activeTab="overview";
+ updateStatus();renderSubjects();updateContext();renderPaperDashboard();
+ toast("Structured dataset imported locally. Legal-answer certification is separate.");
+}
 async function backup(){if(!DATA)return;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(DATA)],{type:'application/json'}));a.download='SILE_iPad_dataset_backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 
 function bindStatic(){
