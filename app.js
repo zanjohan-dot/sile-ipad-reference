@@ -44,13 +44,13 @@ function flatten(){
   const base={paper:s.paper,code:s.code,subject:s.subject};
   const str=v=>Array.isArray(v)?v.join(" "):typeof v==="string"?v:"";
   asList(s.rules).forEach(x=>flat.push({...base,type:"RULE",title:x.title||x.id||"Rule",
-   text:[x.rule,x.when,x.triggers,x.exception,x.deadline,x.procedure,x.trap,x.source,x.detail].map(str).join(" "),obj:x}));
+   text:[x.topic,topicMeta(s,x.topic)?.name,x.rule,x.when,x.triggers,x.exception,x.deadline,x.procedure,x.trap,x.source,x.detail].map(str).join(" "),obj:x}));
   asList(s.deadlines).forEach(x=>flat.push({...base,type:"DEADLINE",title:x.action||x.title||"Deadline",
-   text:[x.deadline,x.action,x.start,x.exception,x.consequence,x.source].map(str).join(" "),obj:x}));
+   text:[x.topic,topicMeta(s,x.topic)?.name,x.deadline,x.action,x.start,x.exception,x.consequence,x.source].map(str).join(" "),obj:x}));
   asList(s.procedures).forEach(x=>flat.push({...base,type:"PROCEDURE",title:x.title||"Procedure",
-   text:asList(x.steps).map(st=>[st.step,st.party,st.precondition,st.document,st.deadline,st.consequence,st.source].map(str).join(" ")).join(" "),obj:x}));
+   text:[x.topic,topicMeta(s,x.topic)?.name,asList(x.steps).map(st=>[st.step,st.party,st.precondition,st.document,st.deadline,st.consequence,st.source].map(str).join(" ")).join(" ")].map(str).join(" "),obj:x}));
   asList(s.traps).forEach(x=>flat.push({...base,type:"TRAP",title:x.trap||x.title||"Exam trap",
-   text:[x.attractive,x.rule,x.spot,x.source].map(str).join(" "),obj:x}));
+   text:[x.topic,topicMeta(s,x.topic)?.name,x.attractive,x.rule,x.spot,x.source].map(str).join(" "),obj:x}));
   asList(s.topics).forEach(meta=>{
    const x=s.teach?.topics?.[meta.id]||{};
    flat.push({...base,type:"LESSON",title:meta.name||meta.id||"Lesson",
