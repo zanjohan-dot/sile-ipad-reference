@@ -1,8 +1,8 @@
 /* Experimental Revision-only local language model; no remote inference. */
 (function(){
 "use strict";
-const runtime="https://esm.run/@mlc-ai/web-llm@0.2.89";
-const models=["Qwen2.5-1.5B-Instruct-q4f16_1-MLC","Qwen2.5-0.5B-Instruct-q4f16_1-MLC"];
+const runtime="https://esm.run/@mlc-ai/web-llm@0.2.86";
+const models=["SmolLM2-1.7B-Instruct-q4f16_1-MLC","SmolLM2-360M-Instruct-q4f16_1-MLC"];
 let engine=null,loaded="",pending=null;
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
