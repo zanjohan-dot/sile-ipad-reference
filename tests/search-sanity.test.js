@@ -21,6 +21,7 @@ function harness(mode){
  let html="",opened=[];
  const box={
   get innerHTML(){return html},set innerHTML(v){html=v},
+  querySelector(selector){return null},
   querySelectorAll(selector){return []}
  };
  const document={getElementById:k=>k==="findResults"?box:null,querySelectorAll:()=>[]};
@@ -37,6 +38,7 @@ for(const mode of ["rapid","learn"]){
  assert(h.html().includes("CG-J26-TEST"),"question visible in "+mode);
  assert(h.html().includes("A director must act loyally."),"source extract");
  assert(h.html().includes("NOT generative AI"),"source extract must not impersonate AI");
+ assert(h.html().includes("Open full source record"),"source record navigation is offered");
  const b=h.find.refreshEvidence("fiduciary duty");
  assert(b.some(x=>x.obj?.id==="CG-D25-EXCLUDED"),"excluded question remains findable");
  assert(h.html().includes("EXCLUDED, not scored"),"excluded not scored");
