@@ -248,7 +248,30 @@ function focusHeader(){return '<div class="focusHeader"><button id="backBtn" cla
 function bindBack(){$('#backBtn').onclick=exitFocus}
 function section(title,content,cls){if(content==null||content===''||(Array.isArray(content)&&!content.length))return'';let body=Array.isArray(content)?'<ul class="bulletList">'+content.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'<p>'+esc(content)+'</p>';return '<section class="readSection '+(cls||'')+'"><h2>'+esc(title)+'</h2>'+body+'</section>'}
 
+function renderRapidQuestion(q){
+ const status=String(q.answer_status||"").toUpperCase();
+ const incomplete=Object.keys(q.options||{}).length!==4;
+ const answer=status.includes("UNRESOLVED")?"No settled answer — not scored":(q.answer||"No answer verified");
+ const opts=Object.entries(q.options||{}).map(([k,v])=>'<div class="optionBox"><strong>'+esc(k)+'.</strong> '+esc(v)+'</div>').join("");
+ enterFocus();
+ setScreen('<div class="reader">'+focusHeader()+
+ '<div class="readerMeta">Rapid question reference · '+esc(q.sitting||q.category||"Source question")+'</div>'+
+ '<h1 class="pageTitle">'+esc((q.label||"Question")+(q.qno?" · Q"+q.qno:""))+'</h1>'+
+ '<div class="provenanceStrip">'+provenanceBadges(q)+'</div>'+
+ (incomplete?'<div class="dataNote"><strong>Source review needed:</strong> this question has '+Object.keys(q.options||{}).length+' recorded options. Verify against the original question before relying on the answer.</div>':"")+
+ section("Question",q.stem,"rule")+
+ '<section class="readSection"><h2>Recorded answer choices</h2><div class="optionList">'+opts+'</div></section>'+
+ section("Answer status / recorded key",answer,"answer")+
+ section("Rule tested",q.tested_rule,"rule")+
+ section("Reasoning",q.explanation||q.official_explanation)+
+ section("Exam trap",q.trap,"trap")+
+ section("Answer basis",q.answer_basis,"warning")+
+ section("Legal authority",q.authority)+section("Course material",q.course_material)+
+ '<div class="dataNote">For attempt tracking and self-testing, switch to Learn → Practice. The recorded answer can be derived or unresolved; refer to its provenance.</div></div>');
+ bindBack();
+}
 function openQuestion(q){
+ if(mode==='rapid')return renderRapidQuestion(q);
  currentQuestion=q;
  enterFocus();
  const opts=Object.entries(q.options||{}).map(([k,v])=>'<div class="optionBox"><strong>'+esc(k)+'.</strong> '+esc(v)+'</div>').join("");
@@ -256,6 +279,7 @@ function openQuestion(q){
   '<div class="conceptCard"><div class="conceptTerm">Option '+esc(k)+'</div><div class="conceptPlain">'+esc(v)+'</div></div>').join("");
  const status=String(q.answer_status||"").toUpperCase();
  const safeAnswer=status.includes("UNRESOLVED")?"No settled answer — not scored":(q.answer||"No settled answer");
+ const incompleteOptions=Object.keys(q.options||{}).length!==4;
  const answer='<div id="answerBlock" class="hiddenAnswer">'+
  section("Answer",safeAnswer,"answer")+
  section("What is this question really testing?",q.really_testing||q.tested_rule,"rule")+
@@ -271,7 +295,7 @@ function openQuestion(q){
   '<div class="readerMeta">Revision practice · '+esc(q.sitting||q.category||"Question")+'</div>'+
   '<h1 class="pageTitle">'+esc((q.label||"Question")+(q.qno?" · Q"+q.qno:""))+'</h1>'+
   '<div class="provenanceStrip">'+provenanceBadges(q)+'</div>'+
-  '<div class="dataNote">Practice using source questions only. Do not copy or save live examination questions.</div>'+
+  '<div class="dataNote">'+(incompleteOptions?'Source verification needed: answer options may be incomplete and this attempt will not count as official-key accuracy.':'Practice using source questions only; the recorded answer may require later reconciliation.')+'</div>'+
   section("Question",q.stem,"rule")+
   '<section class="readSection"><h2>Choose your answer</h2>'+window.SILEUX.questionAttemptUI(q,attempt)+'</section>'+
   answer+'</div>');
@@ -279,7 +303,7 @@ function openQuestion(q){
  const reveal=(selected,record)=>{
   if(record&&selected){
    const old=studyProgress.questions[q.id]||{attempts:0,officialCorrect:0};
-   const official=status==="OFFICIAL";
+   const official=status==="OFFICIAL"&&Object.keys(q.options||{}).length===4;
    studyProgress.questions[q.id]={
      attempts:old.attempts+1,officialCorrect:old.officialCorrect+(official&&selected===q.answer?1:0),
      lastSelected:selected,lastStatus:status,lastAttempt:new Date().toISOString()
