@@ -22,7 +22,9 @@
     <button data-mode="rapid" class="active">Rapid</button>
     <button data-mode="learn">Learn</button>
   </div>
+  <button id="stuckBtn" class="headerAction urgentAction">Stuck? Find rule</button>
   <button id="searchBtn" class="headerAction">Search</button>
+  <button id="aiBtn" class="headerAction secondaryAction">Offline AI</button>
   <button id="statusBtn" class="offlineBadge">No data</button>
 </header>
 
@@ -47,6 +49,8 @@
 
 <input id="fileInput" type="file" accept="application/json,.json" hidden>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="tools-enhancements.js" defer></script>
+<script src="retrieval-enhancements.js" defer></script>
 <script src="app.js" defer></script>
 </body>
 </html>
