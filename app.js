@@ -47,11 +47,11 @@ function renderSubjects(){
   const all=document.createElement('button');
   all.textContent='All Paper '+paper;
   all.className='allSubjects'+(subject===''?' active':'');
-  all.onclick=()=>{subject='';activeTab='overview';document.body.classList.remove('focusMode');renderSubjects();updateContext();renderPaperDashboard()};
+  all.onclick=()=>{subject='';activeTab='overview';document.body.classList.remove('focusMode');renderSubjects();updateContext();renderPaperDashboard();document.body.classList.remove('navOpen')};
   nav.appendChild(all);
   DATA.subjects.filter(s=>s.paper===paper).forEach(s=>{
     const b=document.createElement('button');b.textContent=s.subject;b.classList.toggle('active',s.code===subject);
-    b.onclick=()=>{subject=s.code;activeTab=mode==='learn'?'learn':'overview';document.body.classList.remove('focusMode');renderSubjects();updateContext();renderSubjectDashboard()};
+    b.onclick=()=>{subject=s.code;activeTab=mode==='learn'?'learn':'overview';document.body.classList.remove('focusMode');renderSubjects();updateContext();renderSubjectDashboard();document.body.classList.remove('navOpen')};
     nav.appendChild(b);
   });
 }
@@ -253,23 +253,70 @@ function rankText(it,q){const terms=q.toLowerCase().split(/\s+/).filter(Boolean)
 function runGlobalSearch(){const q=$('#globalSearch').value.trim();const box=$('#searchResults');if(!q){box.innerHTML='';return}let a=flat.filter(x=>x.paper===paper&&(!subject||x.code===subject)&&(!searchType||x.type===searchType));a=a.map(x=>[rankText(x,q),x]).filter(x=>x[0]>0).sort((a,b)=>b[0]-a[0]).slice(0,100).map(x=>x[1]);lastList=a;box.innerHTML='<div class="listHeader"><h2>Results</h2><div class="listCount">'+a.length+' results</div></div><div class="contentList">'+a.map((it,i)=>'<button class="contentRow" data-searchindex="'+i+'"><div class="rowTop"><span class="rowType">'+esc(it.type)+'</span><span class="rowMeta">'+esc(it.subject)+'</span></div><div class="rowTitle">'+esc(it.title)+'</div><div class="rowExcerpt">'+esc(it.text).slice(0,260)+'</div></button>').join('')+'</div>';$$('[data-searchindex]').forEach(b=>b.onclick=()=>openSearchItem(lastList[Number(b.dataset.searchindex)]))}
 function openSearchItem(it){subject=it.code;renderSubjects();updateContext();if(it.type==='QUESTION')openQuestion(it.obj);else if(it.type==='RULE')openRule(it.obj);else if(it.type==='DEADLINE')openDeadline(it.obj);else if(it.type==='PROCEDURE')openProcedure(it.obj);else if(it.type==='TRAP')openTrap(it.obj)}
 
-function renderData(){setScreen('<div class="dataPanel"><div class="eyebrow">Offline data</div><h1 class="pageTitle">Local dataset</h1><p><strong>'+questionCount()+' questions</strong> are stored locally in IndexedDB on this iPad.</p><div class="dataActions"><button id="replaceData" class="primaryButton">Replace verified JSON</button><button id="backupData" class="secondaryButton">Export backup</button></div><div class="dataNote">The public GitHub Pages site contains only the application shell. Your imported SILE dataset is not uploaded to GitHub.</div></div>');$('#replaceData').onclick=()=>$('#fileInput').click();$('#backupData').onclick=backup}
+function renderData(){
+ const topics=Object.values(studyProgress.topics||{}),questions=Object.values(studyProgress.questions||{});
+ const known=topics.filter(x=>x.state==="understood").length,needs=topics.filter(x=>x.state==="needs-review").length;
+ setScreen('<div class="dataPanel"><div class="eyebrow">Offline data</div><h1 class="pageTitle">Local content and revision progress</h1>'+
+ '<p><strong>'+questionCount()+' questions</strong> are stored locally in IndexedDB on this iPad. No dataset or progress is sent to GitHub.</p>'+
+ '<div class="paperStats"><div class="statPill"><strong>'+known+'</strong>lessons understood</div>'+
+ '<div class="statPill"><strong>'+needs+'</strong>topics for revision</div><div class="statPill"><strong>'+questions.length+'</strong>questions attempted</div></div>'+
+ '<div class="dataActions"><button id="replaceData" class="primaryButton">Replace verified JSON</button>'+
+ '<button id="backupData" class="secondaryButton">Export dataset backup</button>'+
+ '<button id="exportProgress" class="secondaryButton">Export revision progress</button></div>'+
+ '<label class="calcField"><span>Restore revision progress from backup</span><input id="progressImport" type="file" accept=".json,application/json"></label>'+
+ '<div class="dataNote"><strong>Legal-content release warning:</strong> The imported 8 November dataset predates the final Taxation Contact Session and later answer-status audits. Do not mistake local availability for legal-content certification.</div>'+
+ '<div class="dataNote"><strong>Exam rules:</strong> The SILE examination brief prohibits AI-powered search engines and answer-generating applications during the examinations. This app is a revision system; any exam use requires checking the permitted reference-material rules.</div>'+
+ '<p class="readerMeta">Search runs locally over existing material; a language model and semantic embeddings are not installed or verified in this build.</p></div>');
+ $('#replaceData').onclick=()=>$('#fileInput').click();
+ $('#backupData').onclick=backup;$('#exportProgress').onclick=exportStudyProgress;
+ $('#progressImport').onchange=async e=>{
+  const file=e.target.files?.[0];if(!file)return;
+  try{const x=JSON.parse(await file.text());
+   if(x.version!==1||!x.topics||!x.questions||Array.isArray(x.topics)||Array.isArray(x.questions))throw new Error("Invalid progress backup");
+   studyProgress=x;await dbPut('study_progress_v1',studyProgress);toast("Revision progress restored");renderData()
+  }catch(err){alert("Progress restore failed: "+err.message)}
+ };
+}
+function renderProgress(){
+ const topics=studyProgress.topics||{},questions=studyProgress.questions||{};
+ const summaries=DATA.subjects.filter(s=>s.paper===paper).map(s=>{
+  const all=asList(s.topics),understood=all.filter(t=>topics[t.id]?.state==="understood").length,
+    weak=all.filter(t=>topics[t.id]?.state==="needs-review").length;
+  const attempts=asList(s.questions).filter(q=>questions[q.id]);
+  const official=asList(s.questions).filter(q=>q.answer_status==="OFFICIAL"&&questions[q.id]);
+  const scored=official.reduce((n,q)=>n+(questions[q.id]?.officialCorrect||0),0);
+  const officialAttempts=official.reduce((n,q)=>n+(questions[q.id]?.attempts||0),0);
+  return '<section class="readSection"><h2>'+esc(s.subject)+'</h2><p>'+understood+'/'+all.length+' lessons understood; '+weak+' need revision. '+attempts.length+' questions attempted.'+
+   (officialAttempts?' Official-answer attempts: '+scored+'/'+officialAttempts+' matching the key.':"")+'</p></section>';
+ }).join("");
+ setScreen('<div class="eyebrow">Revision progress · Paper '+paper+'</div><h1 class="pageTitle">What I understand and what to revise</h1>'+
+ '<p class="pageLead">Only questions with official SILE answers contribute to scored accuracy. Derived-answer comparisons and unresolved questions are not counted as officially correct or incorrect.</p>'+
+ summaries+'<div class="dataActions"><button class="secondaryButton" id="exportProgressPage">Export progress</button></div>');
+ $('#exportProgressPage').onclick=exportStudyProgress;
+}
+function exportStudyProgress(){
+ const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(studyProgress,null,2)],{type:"application/json"}));
+ a.href=url;a.download="SILE_Revision_Progress_2026.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
 function renderSetup(){setScreen('<div class="dataPanel"><div class="eyebrow">Setup</div><h1 class="pageTitle">Import verified SILE data</h1><p>Import the verified JSON once. The dataset is then stored locally on this iPad.</p><div class="dataActions"><button id="importNow" class="primaryButton">Choose JSON file</button></div></div>');$('#importNow').onclick=()=>$('#fileInput').click()}
 
 async function importFile(file){const o=JSON.parse(await file.text());if(!Array.isArray(o.subjects)||o.subjects.length!==8)throw new Error('Expected 8-subject SILE dataset');const q=o.subjects.reduce((n,s)=>n+asList(s.questions).length,0);if(q!==323)throw new Error('Expected 323 questions, found '+q);await dbPut('dataset',o);DATA=o;flatten();subject='';activeTab=mode==='learn'?'learn':'overview';updateStatus();renderSubjects();updateContext();renderPaperDashboard();toast('Verified dataset stored locally')}
 async function backup(){if(!DATA)return;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(DATA)],{type:'application/json'}));a.download='SILE_iPad_dataset_backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 
 function bindStatic(){
-  $$('[data-paper]').forEach(b=>b.onclick=()=>{paper=Number(b.dataset.paper);subject='';activeTab=mode==='learn'?'learn':'overview';document.body.classList.remove('focusMode');$$('[data-paper]').forEach(x=>x.classList.toggle('active',x===b));renderSubjects();updateContext();renderPaperDashboard()});
-  $$('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;activeTab=mode==='learn'?'learn':'overview';document.body.classList.remove('focusMode');$$('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));updateContext();if(subject)renderSubjectDashboard();else renderPaperDashboard()});
-  $('#searchBtn').onclick=()=>{document.body.classList.remove('focusMode');renderSearch()};
-  $('#stuckBtn').onclick=()=>window.SILEFIND.render();
-  $('#aiBtn').onclick=()=>window.SILEFIND.aiStatus();
+  $$('[data-paper]').forEach(b=>b.onclick=()=>{paper=Number(b.dataset.paper);subject='';activeTab=mode==='learn'?'learn':'overview';document.body.classList.remove('focusMode');$$('[data-paper]').forEach(x=>x.classList.toggle('active',x===b));renderSubjects();updateContext();renderPaperDashboard();document.body.classList.remove('navOpen')});
+  $('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;activeTab=mode==='learn'?'learn':'overview';document.body.classList.remove('focusMode');$$('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));updateContext();if(subject)renderSubjectDashboard();else renderPaperDashboard()});
+  $('#searchBtn').onclick=()=>{document.body.classList.remove('focusMode');window.SILEFIND.render()};
+  const navToggle=$('#navToggle');navToggle.onclick=()=>{
+    document.body.classList.toggle('navOpen');
+    navToggle.setAttribute('aria-expanded',String(document.body.classList.contains('navOpen')));
+  };
+  $('#progressBtn').onclick=()=>{document.body.classList.remove('focusMode');document.body.classList.remove('navOpen');renderProgress()};
   $('#statusBtn').onclick=()=>{document.body.classList.remove('focusMode');renderData()};
   $('#toolsBtn').onclick=()=>{if(DATA){document.body.classList.remove('focusMode');renderTools()}};
   $('#dataBtn').onclick=()=>{if(DATA){document.body.classList.remove('focusMode');renderData()}};
   $('#fileInput').onchange=async e=>{const f=e.target.files&&e.target.files[0];try{if(f)await importFile(f)}catch(err){alert('Import failed: '+err.message)}finally{e.target.value=''}};
-  document.addEventListener('keydown',e=>{if(e.key==='/'&&!/input|textarea/i.test(document.activeElement.tagName)){e.preventDefault();renderSearch()}});
+  document.addEventListener('keydown',e=>{if(e.key==='/'&&!/input|textarea/i.test(document.activeElement.tagName)){e.preventDefault();window.SILEFIND.render()}});
 }
 
 async function init(){await openDB();studyProgress=await dbGet('study_progress_v1')||{version:1,topics:{},questions:{}};DATA=await dbGet('dataset');if(DATA)flatten();if(window.SILETOOLS)await window.SILETOOLS.restore();updateStatus();renderSubjects();updateContext();bindStatic();if(DATA)renderPaperDashboard();else renderSetup();if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{})}
