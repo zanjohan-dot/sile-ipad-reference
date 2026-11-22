@@ -4,7 +4,7 @@
 const STOP=new Set("the a an and or but on at in is are was were this that which what with from by to for as of it if can may should would then when where how why have has had be been into does do you your their they we such not only under section act rule persons more less question correct following statement statements".split(" "));
 const E=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const ALIASES={directors:"director",duties:"duty",companies:"company",appeals:"appeal",trademarks:"trademark",questions:"question",acquisitions:"acquisition",shares:"share",remedies:"remedy",transactions:"transaction",arresting:"arrest",arrested:"arrest",improper:"wrongful",unjustified:"wrongful"};
-const tokens=s=>(String(s||"").toLowerCase().replace(/trade[ -]+marks/g,"trademark").match(/[a-z0-9]+(?:\.[0-9]+)?/g)||[])
+const tokens=s=>(String(s||"").toLowerCase().replace(/trade[ -]+marks?/g,"trademark").match(/[a-z0-9]+(?:\.[0-9]+)?/g)||[])
  .map(w=>ALIASES[w]||((w.length>4&&w.endsWith("ies"))?w.slice(0,-3)+"y":(w.length>4&&w.endsWith("s")&&!w.endsWith("ss")&&!w.endsWith("us")?w.slice(0,-1):w)))
  .filter(w=>w.length>1&&!STOP.has(w));
 let lastText="",lastMatches=[],lastSubjectScope=false,lastAll=true,showAllQuestions=false;
