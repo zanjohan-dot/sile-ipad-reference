@@ -50,8 +50,11 @@ function flatten(){
       ...asList(x.core_concepts).map(t=>[t.term,t.plain,t.legal].map(str).join(" "))].map(str).join(" "),
     obj:x,topicId:meta.id});
   });
-  asList(s.questions).forEach(x=>flat.push({...base,type:"QUESTION",title:(x.label||"Question")+(x.qno?" · Q"+x.qno:""),
-   text:[x.stem,Object.values(x.options||{}).join(" "),x.explanation,x.tested_rule,x.trap,x.authority,x.course_material].map(str).join(" "),obj:x}));
+  asList(s.questions).forEach(x=>flat.push({...base,type:"QUESTION",title:(x.id||"Question")+" · "+(x.label||"Question")+(x.qno?" · Q"+x.qno:""),
+   text:[x.topic,topicMeta(s,x.topic)?.name,x.subtopic,x.stem,Object.values(x.options||{}).join(" "),
+     Object.values(x.option_expl||{}).join(" "),x.explanation,x.official_explanation,x.tested_rule,
+     x.really_testing,x.answer_basis,x.key_clue,x.fastest_route,x.trap,x.common_mistake,
+     x.authority,x.course_material,x.cs_guidance,x.notes,x.keywords].map(str).join(" "),obj:x}));
  });
 }
 
@@ -210,6 +213,8 @@ function provenanceBadges(q){
   if(status==='OFFICIAL')out+='<span class="badge official">OFFICIAL SILE ANSWER</span>';
   else if(status==='DERIVED')out+='<span class="badge derived">DERIVED - NOT OFFICIAL</span>';
   else if(status.includes('UNRESOLVED'))out+='<span class="badge unresolved">UNRESOLVED - NOT SCORED</span>';
+  else if(status==='EXCLUDED')out+='<span class="badge unresolved">EXCLUDED - NOT SCORED</span>';
+  else if(status!=='DERIVED')out+='<span class="badge unresolved">STATUS UNVERIFIED - NOT SCORED</span>';
   if(String(q.answer_basis||'').includes('SOURCE CONFLICT')||String(q.notes||'').includes('SOURCE CONFLICT'))out+='<span class="badge conflict">SOURCE CONFLICT</span>';
   if(q.confidence)out+='<span class="badge neutral">Confidence: '+esc(q.confidence)+'</span>';
   return out;
@@ -251,7 +256,7 @@ function section(title,content,cls){if(content==null||content===''||(Array.isArr
 function renderRapidQuestion(q){
  const status=String(q.answer_status||"").toUpperCase();
  const incomplete=Object.keys(q.options||{}).length!==4;
- const answer=status.includes("UNRESOLVED")?"No settled answer — not scored":(q.answer||"No answer verified");
+ const answer=status==="OFFICIAL"||status==="DERIVED"?(q.answer||"No answer verified"):"No settled answer — not scored";
  const opts=Object.entries(q.options||{}).map(([k,v])=>'<div class="optionBox"><strong>'+esc(k)+'.</strong> '+esc(v)+'</div>').join("");
  enterFocus();
  setScreen('<div class="reader">'+focusHeader()+
@@ -278,7 +283,7 @@ function openQuestion(q){
  const perOption=Object.entries(q.option_expl||{}).map(([k,v])=>
   '<div class="conceptCard"><div class="conceptTerm">Option '+esc(k)+'</div><div class="conceptPlain">'+esc(v)+'</div></div>').join("");
  const status=String(q.answer_status||"").toUpperCase();
- const safeAnswer=status.includes("UNRESOLVED")?"No settled answer — not scored":(q.answer||"No settled answer");
+ const safeAnswer=status==="OFFICIAL"||status==="DERIVED"?(q.answer||"No settled answer"):"No settled answer — not scored";
  const incompleteOptions=Object.keys(q.options||{}).length!==4;
  const answer='<div id="answerBlock" class="hiddenAnswer">'+
  section("Answer",safeAnswer,"answer")+
