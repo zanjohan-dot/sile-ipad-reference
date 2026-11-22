@@ -50,7 +50,7 @@ function show(){
   }).slice(0,5);
   if(a.length)tools='<h2 class="sectionTitle">Matching calculators</h2><div class="toolLaunchGrid">'+a.map(c=>'<button class="toolLaunch" data-find-calc="'+E(c.id)+'"><strong>'+E(c.title)+'</strong><small>'+E(c.what).slice(0,180)+'</small></button>').join("")+'</div>';
  }
- box.innerHTML='<div class="listHeader"><div><div class="eyebrow">Ranked references · 8 Nov dataset</div><h2>Relevant references</h2></div><div class="listCount">'+lastMatches.length+' matches</div></div><div class="contentList">'+hits.map((x,i)=>'<button class="contentRow" data-find-index="'+i+'"><div class="rowTop"><span class="rowType">'+E(x.type)+'</span><span class="rowMeta">'+E(x.subject)+'</span></div><div class="rowTitle">'+E(x.title)+'</div><div class="rowExcerpt">'+E(x.text).slice(0,245)+'</div><div class="readerMeta">Matched terms: '+E(x.matched.join(" · "))+' · Retrieval score is not legal confidence</div><div class="sourceMeta">Source: '+E(x.obj?.source||x.obj?.authority||x.obj?.course_material||x.obj?.example?.source||"Check original material — exact citation not stored")+'+</div></button>').join("")+'</div>'+tools+'<div class="dataNote">Similar wording does not mean identical facts or the same answer. Verify each qualification, legal threshold and source. This feature does not generate answers.</div>';
+ box.innerHTML='<div class="listHeader"><div><div class="eyebrow">Ranked references · 8 Nov dataset</div><h2>Relevant references</h2></div><div class="listCount">'+lastMatches.length+' matches</div></div><div class="contentList">'+hits.map((x,i)=>'<button class="contentRow" data-find-index="'+i+'"><div class="rowTop"><span class="rowType">'+E(x.type)+'</span><span class="rowMeta">'+E(x.subject)+'</span></div><div class="rowTitle">'+E(x.title)+'</div><div class="rowExcerpt">'+E(x.text).slice(0,245)+'</div><div class="readerMeta">Matched terms: '+E(x.matched.join(" · "))+' · Retrieval score is not legal confidence</div><div class="sourceMeta">Source: '+E(x.obj?.source||x.obj?.authority||x.obj?.course_material||x.obj?.example?.source||"Check original material — exact citation not stored")+'</div></button>').join("")+'</div>'+tools+'<div class="dataNote">Similar wording does not mean identical facts or the same answer. Verify each qualification, legal threshold and source. This feature does not generate answers.</div>';
  document.querySelectorAll("[data-find-index]").forEach(el=>el.onclick=()=>open(hits[Number(el.dataset.findIndex)]));
  document.querySelectorAll("[data-find-calc]").forEach(el=>el.onclick=()=>window.SILETOOLS.openCalc(el.dataset.findCalc));
 }
@@ -59,10 +59,25 @@ function render(preserve=false){
  document.body.classList.remove("focusMode");
  if(!preserve){lastText="";lastAll=false;lastSubjectScope=true}
  const rev=mode==="learn";
- setScreen('<div class="findPage"><div class="eyebrow">Local reference finder · '+(rev?"REVISION":"RAPID REFERENCE")+'</div><h1 class="pageTitle">Search verified reference material</h1><p class="pageLead">'+(rev?"For revision, ask in everyday English. First find source passages; then optionally use the downloaded local model to explain and suggest an answer based on those passages.":"Search reference terms and source passages. The SILE examination rules prohibit AI-powered search and answer-suggesting tools; verify what reference functions are permitted before any exam use.")+'</p><div class="searchPanel"><label class="findLabel" for="findQuery">Legal issue or key facts</label><textarea id="findQuery" rows="3" placeholder="e.g. 50 people private placement prospectus exemption"></textarea><div class="findControls"><label><input id="findSubjectOnly" type="checkbox" '+(lastSubjectScope?"checked":"")+'> This subject only</label><label><input id="findAllPapers" type="checkbox" '+(lastAll?"checked":"")+'> Include other paper</label><button id="findNow" class="primaryButton">Find references</button></div></div><div id="findResults" class="searchResults"></div>'+(rev?'<div id="modelPanel" class="localSearchSetup"></div>':'')+'</div>');
+ setScreen('<div class="findPage"><div class="eyebrow">Local reference finder · '+(rev?"REVISION":"RAPID REFERENCE")+'</div><h1 class="pageTitle">Search verified reference material</h1><p class="pageLead">'+(rev?"Ask a question in everyday English. Search finds local source material first, then can explain it with the downloaded on-device model — no internet required after successful installation and caching.":"Look up rules, deadlines, procedures and source references quickly. This mode does not generate answers.")+'</p><div class="searchPanel"><label class="findLabel" for="findQuery">Legal issue or key facts</label><textarea id="findQuery" rows="3" placeholder="e.g. 50 people private placement prospectus exemption"></textarea><div class="findControls"><label><input id="findSubjectOnly" type="checkbox" '+(lastSubjectScope?"checked":"")+'> This subject only</label><label><input id="findAllPapers" type="checkbox" '+(lastAll?"checked":"")+'> Include other paper</label><button id="findNow" class="secondaryButton">Find sources</button>'+(rev?'<button id="findExplainNow" class="primaryButton">Find & explain</button>':'')+'</div></div><div id="findResults" class="searchResults"></div>'+(rev?'<div id="modelPanel" class="localSearchSetup"></div>':'')+'</div>');
  document.getElementById("findQuery").value=lastText;
  document.getElementById("findQuery").oninput=e=>{lastText=e.target.value};
  document.getElementById("findNow").onclick=show;
+ if(rev&&document.getElementById("findExplainNow")){
+   document.getElementById("findExplainNow").onclick=()=>{
+     show();
+     const ai=window.SILELOCALMODEL;
+     const details=document.getElementById("modelSection");
+     if(details)details.open=true;
+     if(!lastMatches.length)return;
+     if(ai?.ready)ai.explain();
+     else{
+       const status=document.getElementById("modelStatus");
+       if(status)status.textContent="A local model is not yet installed. Choose the compact model and tap Download / load model. Search sources are available below.";
+       details?.scrollIntoView({block:"nearest",behavior:"smooth"});
+     }
+   };
+ }
  document.getElementById("findSubjectOnly").onchange=e=>{lastSubjectScope=e.target.checked;show()};
  document.getElementById("findAllPapers").onchange=e=>{lastAll=e.target.checked;show()};
  if(rev&&window.SILELOCALMODEL)window.SILELOCALMODEL.panel();
