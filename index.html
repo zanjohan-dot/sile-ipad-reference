@@ -15,7 +15,7 @@
 <body>
 <header class="topbar">
   <div class="brand"><b>SILE Part B 2026</b><span id="contextLabel">Offline reference</span></div>
-  <div class="mode" aria-label="Study mode">
+  <div class="mode">
     <button data-mode="rapid" class="active">Rapid</button>
     <button data-mode="learn">Learn</button>
   </div>
@@ -28,20 +28,20 @@
       <button data-paper="1" class="active">Paper 1</button>
       <button data-paper="2">Paper 2</button>
     </div>
-
     <div class="navLabel">Subjects</div>
     <nav id="subjects"></nav>
-
     <div class="sideActions">
       <button id="toolsBtn">Tools & calculators</button>
       <button id="dataBtn">Data & offline status</button>
     </div>
   </aside>
 
-  <section class="resultsPane">
-    <div class="searchWrap">
-      <label for="search">Search this paper</label>
-      <input id="search" type="search" autocomplete="off" placeholder="Search rule, section, deadline, question, trap…">
+  <main class="workspace">
+    <div class="searchBar">
+      <div>
+        <label for="search">Search</label>
+        <input id="search" type="search" autocomplete="off" placeholder="Rule, section, deadline, question, trap…">
+      </div>
       <div class="filters">
         <button data-filter="" class="filterChip active">All</button>
         <button data-filter="RULE" class="filterChip">Rules</button>
@@ -50,13 +50,10 @@
         <button data-filter="TRAP" class="filterChip">Traps</button>
       </div>
     </div>
-    <div id="resultsMeta" class="resultsMeta"></div>
-    <div id="results" class="results"></div>
-  </section>
 
-  <main id="main" class="detail">
-    <section id="emptyState" class="emptyState"></section>
-    <article id="content" hidden></article>
+    <div id="workspaceBody" class="workspaceBody">
+      <section id="screen"></section>
+    </div>
   </main>
 </div>
 
