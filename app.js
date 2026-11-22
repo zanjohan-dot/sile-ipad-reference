@@ -324,8 +324,16 @@ function openQuestion(q){
    const old=studyProgress.questions[q.id]||{attempts:0,officialCorrect:0};
    const revision=questionRevision(q),sameVersion=old.questionRevision===revision;
    const official=status==="OFFICIAL"&&Object.keys(q.options||{}).length===4;
+   // Preserve prior score totals when the recorded question or key changes.
+   const priorScoreVersions=Array.isArray(old.priorScoreVersions)?old.priorScoreVersions.slice():[];
+   if(!sameVersion&&Number(old.attempts||0)>0){
+    priorScoreVersions.push({questionRevision:old.questionRevision||"legacy-unversioned",
+     attempts:Number(old.attempts||0),officialCorrect:Number(old.officialCorrect||0),
+     officialAttempts:Number(old.officialAttempts||0),lastAttempt:old.lastAttempt||null,
+     lastStatus:old.lastStatus||null});
+   }
    const updated={
-    ...old,attempts:Number(old.attempts||0)+1,
+    ...old,priorScoreVersions,attempts:Number(old.attempts||0)+1,
     officialCorrect:(sameVersion?Number(old.officialCorrect||0):0)+(official&&selected===q.answer?1:0),
     officialAttempts:(sameVersion?Number(old.officialAttempts||0):0)+(official?1:0),
     lastSelected:selected,lastStatus:status,lastAttempt:new Date().toISOString(),questionRevision:revision
@@ -450,9 +458,11 @@ function renderProgress(){
   const officialAttempts=official.reduce((n,q)=>n+Number(questions[q.id]?.officialAttempts||0),0);
   const flagged=asList(s.questions).filter(q=>questions[q.id]?.needsReview).length;
   const unverified=asList(s.questions).filter(q=>questions[q.id]?.attempts && questions[q.id]?.questionRevision!==questionRevision(q)).length;
+  const historical=asList(s.questions).filter(q=>(questions[q.id]?.priorScoreVersions||[]).length>0).length;
   return '<section class="readSection"><h2>'+esc(s.subject)+'</h2><p>'+understood+'/'+all.length+' lessons understood; '+weak+' topics need revision; '+attempts.filter(q=>questions[q.id]?.attempts).length+' questions attempted; '+flagged+' questions marked for revision.'+
    (officialAttempts?' Version-matched official-key attempts: '+scored+'/'+officialAttempts+'.':"")+
-   (unverified?' Earlier score history retained but unverified: '+unverified+' questions.':"")+'</p></section>';
+   (unverified?' Earlier score history retained but unverified: '+unverified+' questions.':"")+
+   (historical?' Archived scores from older answer versions: '+historical+' questions.':"")+'</p></section>';
  }).join("");
  setScreen('<div class="eyebrow">Revision progress · Paper '+paper+'</div><h1 class="pageTitle">What I understand and what to revise</h1>'+
  '<p class="pageLead">Scores include only attempts against an unchanged recorded official key and complete choices. Historical attempts without a matching answer version remain saved but unscored. The older legal-content dataset remains under NO-GO review.</p>'+
