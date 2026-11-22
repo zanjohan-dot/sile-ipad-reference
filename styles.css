@@ -206,3 +206,73 @@ body.focusMode .screen{padding-left:44px;padding-right:44px}
 .calcField small{display:block;color:var(--muted);font-size:.75rem;margin-top:5px}
 @media(max-width:1100px){.brandBlock{min-width:165px}.appHeader{gap:7px;padding:8px 10px}.headerAction{padding:0 10px;font-size:.82rem}.offlineBadge{font-size:.72rem}.calcForm{grid-template-columns:1fr}}
 @media(max-width:780px){.urgentAction{font-size:.8rem}.secondaryAction{display:none}}
+
+/* 2026-11-23: Beginner lessons, structured procedures, iPad navigation */
+.procedureSteps{counter-reset:none;padding:0;margin:14px 0;list-style:none;display:grid;gap:14px}
+.procedureStep{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:18px 20px;border-left:5px solid var(--accent)}
+.procedureNum{font-size:.73rem;font-weight:900;letter-spacing:.09em;color:#1366a0;margin-bottom:8px}
+.procedureStep h2{font-size:1.13rem;line-height:1.45;margin:0 0 14px}
+.procedureFacts{margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.procedureFacts>div{border-top:1px solid var(--line);padding-top:8px}
+.procedureFacts dt{color:var(--muted);font-weight:800;font-size:.77rem}
+.procedureFacts dd{margin:3px 0 0;font-size:.91rem;overflow-wrap:anywhere}
+.learningStage{display:grid;grid-template-columns:43px minmax(0,1fr);gap:14px;margin:20px 0 26px}
+.stageNum{height:40px;width:40px;background:#174b70;border-radius:50%;color:#fff;display:grid;place-items:center;font-weight:900}
+.stageBody{min-width:0}
+.stageBody>h2{font-size:1.2rem;margin:0 0 12px}
+.stageBody>h3{font-size:1rem;margin:14px 0 5px}
+.stageBody>p{max-width:74ch}
+.stageBody .readSection{margin:10px 0}
+.stageBody .conceptCard{padding:14px}
+.studyActions{display:flex;gap:9px;flex-wrap:wrap;margin:14px 0}
+.studyActions button{min-height:46px}
+.progressPanel{margin-top:24px}
+.relatedQuestions{display:grid;gap:8px}
+.relatedQuestion{border:1px solid var(--line);border-radius:10px;background:#fff;padding:11px 13px;min-height:46px;text-align:left;color:#175984;font-weight:750}
+.relatedQuestion small{float:right;color:var(--muted);font-size:.71rem}
+.answerChoice{border:1px solid var(--line);border-radius:11px;background:#fff;display:flex;gap:11px;align-items:flex-start;padding:12px;margin:7px 0;min-height:52px}
+.answerChoice:has(input:checked){border-color:#287fbd;background:#ebf4fb}
+.answerChoice input{height:20px;width:20px;flex:0 0 20px;margin:3px}
+.answerLetter{font-weight:850;color:#173f5d}
+.answerText{flex:1}
+.navToggle{display:none;background:transparent;border:1px solid #62849c;color:#fff;border-radius:9px;min-height:42px;min-width:44px}
+body.focusMode .mainArea{min-width:0}
+.appHeader{overflow:hidden}
+.brandContext{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:1060px){
+ .appHeader{gap:8px}
+ .brandBlock{min-width:0;max-width:200px}
+ .appShell{grid-template-columns:205px minmax(0,1fr)}
+ .subjectHeaderTop{flex-wrap:wrap}
+ .subjectHeader .pageTitle{font-size:1.58rem}
+ .subjectGrid,.essentialsGrid{grid-template-columns:1fr 1fr}
+ .modeSwitch button{padding:0 12px}
+}
+@media(max-width:800px){
+ .appHeader{display:grid;grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"brand mode search" "status status status";height:112px;align-content:center;row-gap:5px}
+ .brandBlock{grid-area:brand;max-width:none}
+ .modeSwitch{grid-area:mode}
+ #searchBtn{grid-area:search;margin:0}
+ #statusBtn{grid-area:status;justify-self:end;min-height:31px;padding:3px 10px}
+ .appShell{height:calc(100dvh - 112px);grid-template-columns:180px minmax(0,1fr)}
+ .screen{padding:16px 15px 75px}
+ .pageTitle{font-size:1.5rem}
+ .subjectGrid,.essentialsGrid,.learnGrid,.miniGrid{grid-template-columns:1fr}
+ .procedureFacts{grid-template-columns:1fr}
+ .subjectNav button{padding:9px;font-size:.89rem}
+ .tabBar{overflow-x:auto;white-space:nowrap}
+}
+@media(max-width:630px){
+ .appHeader{grid-template-columns:44px minmax(0,1fr) auto;grid-template-areas:"nav brand search" "mode mode status"}
+ .navToggle{grid-area:nav;display:grid;place-items:center}
+ .brandTitle{font-size:.94rem}
+ .modeSwitch{justify-self:start}
+ .appShell{grid-template-columns:minmax(0,1fr)}
+ .sidebar{position:fixed;top:112px;left:0;bottom:0;width:min(270px,82vw);z-index:30;box-shadow:8px 0 18px #12243322;transform:translateX(-110%);transition:transform .18s}
+ body.navOpen .sidebar{transform:translateX(0)}
+ body.focusMode .sidebar{display:none}
+ body.focusMode .screen{padding:18px 15px 75px}
+ .reader .pageTitle{font-size:1.45rem}
+ .learningStage{grid-template-columns:33px minmax(0,1fr);gap:8px}
+ .stageNum{width:30px;height:30px}
+}

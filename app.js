@@ -10,6 +10,8 @@ let activeTab='overview';
 let searchType='';
 let lastList=[];
 let previousView=null;
+let studyProgress={version:1,topics:{},questions:{}};
+let currentQuestion=null;
 
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
@@ -28,15 +30,28 @@ function updateStatus(){$('#statusBtn').textContent=DATA?'Offline - '+questionCo
 function updateContext(){const s=currentSubject();const m=mode==='rapid'?'Rapid':'Learn';$('#contextLabel').textContent=s?'Paper '+paper+' - '+s.subject+' - '+m:'Paper '+paper+' - '+m}
 
 function flatten(){
-  flat=[];
-  DATA.subjects.forEach(s=>{
-    const base={paper:s.paper,code:s.code,subject:s.subject};
-    asList(s.rules).forEach(x=>flat.push({...base,type:'RULE',title:x.title||x.id||'Rule',text:[x.rule,x.when,x.triggers,x.exception,x.deadline,x.procedure,x.trap,x.source,x.detail].join(' '),obj:x}));
-    asList(s.deadlines).forEach(x=>flat.push({...base,type:'DEADLINE',title:x.action||x.title||'Deadline',text:JSON.stringify(x),obj:x}));
-    asList(s.procedures).forEach(x=>flat.push({...base,type:'PROCEDURE',title:x.title||x.name||x.action||'Procedure',text:JSON.stringify(x),obj:x}));
-    asList(s.traps).forEach(x=>flat.push({...base,type:'TRAP',title:x.trap||x.title||'Exam trap',text:JSON.stringify(x),obj:x}));
-    asList(s.questions).forEach(x=>flat.push({...base,type:'QUESTION',title:(x.label||'Question')+(x.qno?' - Q'+x.qno:''),text:[x.stem,Object.values(x.options||{}).join(' '),x.explanation,x.tested_rule,x.trap,x.authority,x.course_material].join(' '),obj:x}));
+ flat=[];
+ DATA.subjects.forEach(s=>{
+  const base={paper:s.paper,code:s.code,subject:s.subject};
+  const str=v=>Array.isArray(v)?v.join(" "):typeof v==="string"?v:"";
+  asList(s.rules).forEach(x=>flat.push({...base,type:"RULE",title:x.title||x.id||"Rule",
+   text:[x.rule,x.when,x.triggers,x.exception,x.deadline,x.procedure,x.trap,x.source,x.detail].map(str).join(" "),obj:x}));
+  asList(s.deadlines).forEach(x=>flat.push({...base,type:"DEADLINE",title:x.action||x.title||"Deadline",
+   text:[x.deadline,x.action,x.start,x.exception,x.consequence,x.source].map(str).join(" "),obj:x}));
+  asList(s.procedures).forEach(x=>flat.push({...base,type:"PROCEDURE",title:x.title||"Procedure",
+   text:asList(x.steps).map(st=>[st.step,st.party,st.precondition,st.document,st.deadline,st.consequence,st.source].map(str).join(" ")).join(" "),obj:x}));
+  asList(s.traps).forEach(x=>flat.push({...base,type:"TRAP",title:x.trap||x.title||"Exam trap",
+   text:[x.attractive,x.rule,x.spot,x.source].map(str).join(" "),obj:x}));
+  asList(s.topics).forEach(meta=>{
+   const x=s.teach?.topics?.[meta.id]||{};
+   flat.push({...base,type:"LESSON",title:meta.name||meta.id||"Lesson",
+    text:[meta.common_term,meta.formal_term,x.big_picture,x.who,x.when,x.basic_rule,x.exam_application,x.exam_trap_plain,
+      ...asList(x.core_concepts).map(t=>[t.term,t.plain,t.legal].map(str).join(" "))].map(str).join(" "),
+    obj:x,topicId:meta.id});
   });
+  asList(s.questions).forEach(x=>flat.push({...base,type:"QUESTION",title:(x.label||"Question")+(x.qno?" · Q"+x.qno:""),
+   text:[x.stem,Object.values(x.options||{}).join(" "),x.explanation,x.tested_rule,x.trap,x.authority,x.course_material].map(str).join(" "),obj:x}));
+ });
 }
 
 function renderSubjects(){
@@ -45,11 +60,11 @@ function renderSubjects(){
   const all=document.createElement('button');
   all.textContent='All Paper '+paper;
   all.className='allSubjects'+(subject===''?' active':'');
-  all.onclick=()=>{subject='';activeTab='overview';document.body.classList.remove('focusMode');renderSubjects();updateContext();renderPaperDashboard()};
+  all.onclick=()=>{subject='';activeTab='overview';document.body.classList.remove('focusMode');renderSubjects();updateContext();renderPaperDashboard();document.body.classList.remove('navOpen')};
   nav.appendChild(all);
   DATA.subjects.filter(s=>s.paper===paper).forEach(s=>{
     const b=document.createElement('button');b.textContent=s.subject;b.classList.toggle('active',s.code===subject);
-    b.onclick=()=>{subject=s.code;activeTab=mode==='learn'?'learn':'overview';document.body.classList.remove('focusMode');renderSubjects();updateContext();renderSubjectDashboard()};
+    b.onclick=()=>{subject=s.code;activeTab=mode==='learn'?'learn':'overview';document.body.classList.remove('focusMode');renderSubjects();updateContext();renderSubjectDashboard();document.body.classList.remove('navOpen')};
     nav.appendChild(b);
   });
 }
@@ -97,11 +112,20 @@ function renderSubjectOverview(s){
 }
 
 function renderLearnList(s){
-  const metas=asList(s.topics);const teach=s.teach&&s.teach.topics?s.teach.topics:{};
-  let cards=metas.map(meta=>{const lesson=teach[meta.id]||{};const summary=lesson.big_picture||meta.common_term||'';return '<button class="lessonCard" data-topic="'+esc(meta.id)+'"><div class="lessonPriority">'+esc(meta.priority||'')+(meta.freq?' - '+esc(meta.freq):'')+'</div><div class="lessonTitle">'+esc(meta.name||meta.id)+'</div><div class="lessonSummary">'+esc(summary).slice(0,230)+'</div><div class="lessonMeta">'+esc(meta.cs_emphasis||'')+'</div></button>'}).join('');
-  return '<div class="listHeader"><div><div class="eyebrow">Learn mode</div><h2>Topics</h2></div><div class="listCount">'+metas.length+' topics</div></div><div class="learnGrid">'+cards+'</div>';
+ const metas=asList(s.topics),teach=s.teach&&s.teach.topics?s.teach.topics:{};
+ const done=metas.filter(x=>studyProgress.topics[x.id]?.state==="understood").length;
+ let cards=metas.map(meta=>{
+  const lesson=teach[meta.id]||{},v=studyProgress.topics[meta.id],summary=lesson.big_picture||meta.common_term||"";
+  const state=v?.state==="understood"?"✓ Can explain":v?.state==="needs-review"?"↻ Needs revision":"Not studied";
+  return '<button class="lessonCard" data-topic="'+esc(meta.id)+'"><div class="lessonPriority">'+esc(meta.priority||"")+'</div>'+
+  '<div class="lessonTitle">'+esc(meta.name||meta.id)+'</div><div class="lessonSummary">'+esc(summary).slice(0,240)+'</div>'+
+  '<div class="lessonMeta">'+esc(state)+' · '+esc(meta.cs_emphasis||"")+'</div></button>';
+ }).join("");
+ return '<div class="listHeader"><div><div class="eyebrow">Start from zero · lessons and practice</div><h2>Learn the subject</h2></div>'+
+ '<div class="listCount">'+done+' of '+metas.length+' marked understood</div></div>'+
+ '<p class="pageLead">Choose one lesson. Learn the idea first, then the words, legal rule, example, exam trap and self-check. No previous knowledge is assumed.</p>'+
+ '<div class="learnGrid">'+cards+'</div>';
 }
-
 function provenanceBadges(q){
   const status=String(q.answer_status||'').toUpperCase();let out='';
   if(status==='OFFICIAL')out+='<span class="badge official">OFFICIAL SILE ANSWER</span>';
@@ -119,11 +143,20 @@ function renderQuestionList(s){
 }
 
 function renderGenericList(s,type,items){
-  const label=type==='RULE'?'Rules':type==='DEADLINE'?'Deadlines':type==='PROCEDURE'?'Procedures':'Exam traps';
-  let rows=items.map((x,i)=>{let title='';let excerpt='';if(type==='RULE'){title=x.title||x.id||'Rule';excerpt=x.rule||''}if(type==='DEADLINE'){title=x.action||x.title||'Deadline';excerpt=[x.deadline,x.start,x.consequence].filter(Boolean).join(' - ')}if(type==='PROCEDURE'){title=x.title||x.name||x.action||'Procedure';excerpt=[x.steps,x.procedure,x.when,x.detail,x.source].filter(Boolean).map(v=>Array.isArray(v)?v.join(' '):String(v)).join(' - ')}if(type==='TRAP'){title=x.trap||x.title||'Exam trap';excerpt=x.rule||x.spot||x.attractive||''}return '<button class="contentRow" data-kind="'+type.toLowerCase()+'" data-index="'+i+'"><div class="rowTop"><span class="rowType">'+type+'</span><span class="rowMeta">'+esc(x.topic||'')+'</span></div><div class="rowTitle">'+esc(title)+'</div><div class="rowExcerpt">'+esc(excerpt).slice(0,280)+'</div></button>'}).join('');
-  return '<div class="listHeader"><div><div class="eyebrow">'+esc(s.subject)+'</div><h2>'+label+'</h2></div><div class="listCount">'+items.length+' items</div></div><div class="contentList">'+rows+'</div>';
+ const label=type==='RULE'?'Rules':type==='DEADLINE'?'Deadlines':type==='PROCEDURE'?'Procedures':'Exam traps';
+ const rows=items.map((x,i)=>{
+   let title="",excerpt="";
+   if(type==='RULE'){title=x.title||x.id||"Rule";excerpt=x.rule||""}
+   if(type==='DEADLINE'){title=x.action||x.title||"Deadline";excerpt=[x.deadline,x.start,x.consequence].filter(Boolean).join(" · ")}
+   if(type==='PROCEDURE'){title=x.title||"Procedure";excerpt=window.SILEUX.procedurePreview(x)}
+   if(type==='TRAP'){title=x.trap||x.title||"Exam trap";excerpt=x.rule||x.spot||x.attractive||""}
+   return '<button class="contentRow" data-kind="'+type.toLowerCase()+'" data-index="'+i+'">'+
+     '<div class="rowTop"><span class="rowType">'+type+'</span><span class="rowMeta">'+esc(x.topic||"")+'</span></div>'+
+     '<div class="rowTitle">'+esc(title)+'</div><div class="rowExcerpt">'+esc(excerpt).slice(0,320)+'</div></button>';
+ }).join("");
+ return '<div class="listHeader"><div><div class="eyebrow">'+esc(s.subject)+'</div><h2>'+label+'</h2></div>'+
+  '<div class="listCount">'+items.length+' items</div></div><div class="contentList">'+rows+'</div>';
 }
-
 function bindRows(){
   $$('.lessonCard').forEach(b=>b.onclick=()=>openLesson(b.dataset.topic));
   $$('.contentRow').forEach(b=>b.onclick=()=>{const s=currentSubject();const i=Number(b.dataset.index);const kind=b.dataset.kind;if(kind==='question')openQuestion(asList(s.questions)[i]);if(kind==='rule')openRule(asList(s.rules)[i]);if(kind==='deadline')openDeadline(asList(s.deadlines)[i]);if(kind==='procedure')openProcedure(asList(s.procedures)[i]);if(kind==='trap')openTrap(asList(s.traps)[i])});
@@ -137,30 +170,81 @@ function bindBack(){$('#backBtn').onclick=exitFocus}
 function section(title,content,cls){if(content==null||content===''||(Array.isArray(content)&&!content.length))return'';let body=Array.isArray(content)?'<ul class="bulletList">'+content.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'<p>'+esc(content)+'</p>';return '<section class="readSection '+(cls||'')+'"><h2>'+esc(title)+'</h2>'+body+'</section>'}
 
 function openQuestion(q){
-  enterFocus();
-  let options=Object.entries(q.options||{}).map(([k,v])=>'<div class="optionBox"><strong>'+esc(k)+'.</strong> '+esc(v)+'</div>').join('');
-  let wrong=Object.entries(q.option_expl||{}).map(([k,v])=>'<div class="conceptCard"><div class="conceptTerm">Option '+esc(k)+'</div><div class="conceptPlain">'+esc(v)+'</div></div>').join('');
-  let answer='<div id="answerBlock" class="hiddenAnswer">'+section('Answer',(q.answer||'')+(q.answer_status?' - '+q.answer_status:''),'answer')+section('Explanation',q.explanation||q.official_explanation,'')+section('Tested rule',q.tested_rule,'rule')+section('Fastest route',q.fastest_route,'')+section('Exam trap',q.trap,'trap')+(wrong?'<section class="readSection"><h2>Option-by-option explanation</h2><div class="conceptTable">'+wrong+'</div></section>':'')+section('Answer basis',q.answer_basis,'warning')+section('Course material',q.course_material,'')+section('Contact Session guidance',q.cs_guidance,'')+section('Authority',q.authority,'')+'</div>';
-  setScreen('<div class="reader">'+focusHeader()+'<div class="readerMeta">'+esc(q.sitting||q.category||'Question')+'</div><h1 class="pageTitle">'+esc((q.label||'Question')+(q.qno?' - Q'+q.qno:''))+'</h1><div class="provenanceStrip">'+provenanceBadges(q)+'</div>'+section('Question',q.stem,'rule')+'<section class="readSection"><h2>Options</h2><div class="optionList">'+options+'</div><div class="answerReveal"><button id="revealBtn" class="revealButton">Reveal answer and explanation</button></div></section>'+answer+'</div>');
-  bindBack();$('#revealBtn').onclick=()=>{$('#answerBlock').classList.add('revealed');$('#revealBtn').style.display='none'};
+ currentQuestion=q;
+ enterFocus();
+ const opts=Object.entries(q.options||{}).map(([k,v])=>'<div class="optionBox"><strong>'+esc(k)+'.</strong> '+esc(v)+'</div>').join("");
+ const perOption=Object.entries(q.option_expl||{}).map(([k,v])=>
+  '<div class="conceptCard"><div class="conceptTerm">Option '+esc(k)+'</div><div class="conceptPlain">'+esc(v)+'</div></div>').join("");
+ const status=String(q.answer_status||"").toUpperCase();
+ const safeAnswer=status.includes("UNRESOLVED")?"No settled answer — not scored":(q.answer||"No settled answer");
+ const answer='<div id="answerBlock" class="hiddenAnswer">'+
+ section("Answer",safeAnswer,"answer")+
+ section("What is this question really testing?",q.really_testing||q.tested_rule,"rule")+
+ section("How to reason through it",q.explanation||q.official_explanation,"")+
+ section("Useful factual clue",q.key_clue)+
+ section("Fastest route",q.fastest_route)+section("Exam trap",q.trap,"trap")+
+ (perOption?'<section class="readSection"><h2>Why each option is right or wrong</h2><div class="conceptTable">'+perOption+'</div></section>':"")+
+ section("Answer status and basis",q.answer_basis,"warning")+
+ section("Course material",q.course_material)+section("Contact Session guidance",q.cs_guidance)+section("Legal authority",q.authority)+
+ '</div>';
+ const attempt=studyProgress.questions[q.id];
+ setScreen('<div class="reader">'+focusHeader()+
+  '<div class="readerMeta">Revision practice · '+esc(q.sitting||q.category||"Question")+'</div>'+
+  '<h1 class="pageTitle">'+esc((q.label||"Question")+(q.qno?" · Q"+q.qno:""))+'</h1>'+
+  '<div class="provenanceStrip">'+provenanceBadges(q)+'</div>'+
+  '<div class="dataNote">Practice using source questions only. Do not copy or save live examination questions.</div>'+
+  section("Question",q.stem,"rule")+
+  '<section class="readSection"><h2>Choose your answer</h2>'+window.SILEUX.questionAttemptUI(q,attempt)+'</section>'+
+  answer+'</div>');
+ bindBack();
+ const reveal=(selected,record)=>{
+  if(record&&selected){
+   const old=studyProgress.questions[q.id]||{attempts:0,officialCorrect:0};
+   const official=status==="OFFICIAL";
+   studyProgress.questions[q.id]={
+     attempts:old.attempts+1,officialCorrect:old.officialCorrect+(official&&selected===q.answer?1:0),
+     lastSelected:selected,lastStatus:status,lastAttempt:new Date().toISOString()
+   };
+   dbPut('study_progress_v1',studyProgress).catch(err=>console.error("Progress save failed",err));
+  }
+  const message=window.SILEUX.interpretation(q,selected);
+  const feedback=$('#practiceFeedback');
+  if(feedback)feedback.innerHTML='<div class="dataNote">'+esc(message)+'</div>';
+  $('#answerBlock').classList.add("revealed");
+  $('#answerBlock').scrollIntoView({block:"nearest"});
+ };
+ $('#submitPractice').onclick=()=>{
+   const selected=document.querySelector('input[name="practiceChoice"]:checked');
+   if(!selected){const feedback=$('#practiceFeedback');if(feedback)feedback.textContent="Choose an answer first, or reveal without recording.";return;}
+   reveal(selected.value,true);$('#submitPractice').disabled=true;
+ };
+ $('#revealWithoutAttempt').onclick=()=>reveal("",false);
 }
-
 function openRule(r){enterFocus();setScreen('<div class="reader">'+focusHeader()+'<div class="readerMeta">Rule - '+esc(r.topic||'')+'</div><h1 class="pageTitle">'+esc(r.title||r.id||'Rule')+'</h1>'+section('Core rule',r.rule,'rule')+section('When it applies',r.when,'')+section('Triggers',r.triggers,'')+section('Exception',r.exception,'')+section('Deadline',r.deadline,'')+section('Procedure',r.procedure,'')+section('Exam trap',r.trap,'trap')+section('Source',r.source,'')+section('Verification note',r.verify,'warning')+section('Detail',r.detail,'')+'</div>');bindBack()}
 function openDeadline(d){enterFocus();setScreen('<div class="reader">'+focusHeader()+'<div class="readerMeta">Deadline - '+esc(d.topic||'')+'</div><h1 class="pageTitle">'+esc(d.action||d.title||'Deadline')+'</h1>'+section('Deadline',d.deadline,'rule')+section('Starts from',d.start,'')+section('Exception',d.exception,'')+section('Consequence',d.consequence,'trap')+section('Source',d.source,'')+'</div>');bindBack()}
-function openProcedure(p){enterFocus();let steps=p.steps||p.procedure||p.process||p.detail||'';setScreen('<div class="reader">'+focusHeader()+'<div class="readerMeta">Procedure - '+esc(p.topic||'')+'</div><h1 class="pageTitle">'+esc(p.title||p.name||p.action||'Procedure')+'</h1>'+section('When to use it',p.when||p.trigger||'','')+section('Procedure',Array.isArray(steps)?steps:String(steps),'rule')+section('Deadline',p.deadline||p.time_limit||'','')+section('Exam point',p.trap||p.exam_point||'','trap')+section('Source',p.source||'','')+'</div>');bindBack()}
+function openProcedure(p){
+ enterFocus();
+ const s=currentSubject(),related=asList(s?.questions).filter(q=>q.topic===p.topic);
+ setScreen('<div class="reader">'+focusHeader()+window.SILEUX.procedure(p,related)+'</div>');
+ bindBack();
+ $$('[data-related-id]').forEach(b=>b.onclick=()=>{const q=related.find(q=>q.id===b.dataset.relatedId);if(q)openQuestion(q)});
+}
 function openTrap(t){enterFocus();setScreen('<div class="reader">'+focusHeader()+'<div class="readerMeta">Exam trap - '+esc(t.topic||'')+'</div><h1 class="pageTitle">'+esc(t.trap||t.title||'Exam trap')+'</h1>'+section('Why it is attractive',t.attractive,'')+section('Correct rule',t.rule,'rule')+section('How to spot it',t.spot,'trap')+section('Related questions',asList(t.related_q),'')+section('Source',t.source,'')+'</div>');bindBack()}
 
 function openLesson(topicId){
-  const s=currentSubject();const meta=topicMeta(s,topicId)||{};const lesson=(s.teach&&s.teach.topics&&s.teach.topics[topicId])||{};enterFocus();
-  let concepts=asList(lesson.core_concepts).map(c=>'<div class="conceptCard"><div class="conceptTerm">'+esc(c.term)+'</div><div class="conceptPlain">'+esc(c.plain)+'</div><div class="conceptLegal">'+esc(c.legal)+'</div></div>').join('');
-  let how=asList(lesson.how_it_works).map(x=>'<li>'+esc(x)+'</li>').join('');
-  let ex='';if(lesson.example)ex='<section class="readSection"><h2>Worked example</h2><div class="miniGrid"><div class="miniBlock"><div class="miniLabel">Facts</div>'+esc(lesson.example.facts||'')+'</div><div class="miniBlock"><div class="miniLabel">Working</div>'+esc(lesson.example.working||'')+'</div><div class="miniBlock"><div class="miniLabel">Result</div>'+esc(lesson.example.result||'')+'</div><div class="miniBlock"><div class="miniLabel">Source</div>'+esc(lesson.example.source||'')+'</div></div></section>';
-  let conflicts=asList(lesson.conflict_teaching).map(c=>'<div class="conflictBox"><strong>Source:</strong> '+esc(c.what_source_says||'')+'<br><strong>Conflict:</strong> '+esc(c.conflict||'')+'<br><strong>Exam strategy:</strong> '+esc(c.strategy||'')+'</div>').join('');
-  let checks=asList(lesson.learning_check).map(c=>'<details><summary>'+esc(c.q||'Check')+'</summary><div class="checkAnswer">'+esc(c.a||'')+'</div></details>').join('');
-  setScreen('<div class="reader">'+focusHeader()+'<div class="readerMeta">'+esc(meta.priority||'')+(meta.freq?' - '+esc(meta.freq):'')+'</div><h1 class="pageTitle">'+esc(meta.name||topicId)+'</h1>'+section('Big picture',lesson.big_picture,'rule')+'<div class="miniGrid"><div class="miniBlock"><div class="miniLabel">Who</div>'+esc(lesson.who||'')+'</div><div class="miniBlock"><div class="miniLabel">When</div>'+esc(lesson.when||'')+'</div></div>'+section('Core rule',lesson.basic_rule,'rule')+(concepts?'<section class="readSection"><h2>Core concepts</h2><div class="conceptTable">'+concepts+'</div></section>':'')+(how?'<section class="readSection"><h2>How it works</h2><ol class="numberedList">'+how+'</ol></section>':'')+ex+section('Exceptions',asList(lesson.exceptions_plain),'')+section('How SILE tests it',lesson.exam_application,'')+(lesson.exam_trap_plain?'<div class="trapBox"><div class="miniLabel">Exam trap</div>'+esc(lesson.exam_trap_plain)+'</div>':'')+(asList(lesson.memory_version).length?'<div class="memoryBox"><div class="miniLabel">Memory version</div><ul class="bulletList">'+asList(lesson.memory_version).map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></div>':'')+(conflicts?'<section class="readSection warning"><h2>Conflicts and exam strategy</h2>'+conflicts+'</section>':'')+(checks?'<section class="readSection"><h2>Self-check</h2><div class="checkList">'+checks+'</div></section>':'')+'</div>');
-  bindBack();
+ const s=currentSubject(),meta=topicMeta(s,topicId)||{},lesson=s.teach?.topics?.[topicId]||{};
+ const related=asList(s.questions).filter(q=>q.topic===topicId);
+ enterFocus();
+ setScreen('<div class="reader">'+focusHeader()+window.SILEUX.lesson(meta,lesson,related,studyProgress.topics[topicId]||{})+'</div>');
+ bindBack();
+ $$('[data-related-id]').forEach(b=>b.onclick=()=>{const q=related.find(q=>q.id===b.dataset.relatedId);if(q)openQuestion(q)});
+ $$('[data-study-state]').forEach(b=>b.onclick=async()=>{
+  studyProgress.topics[topicId]={state:b.dataset.studyState,updated:new Date().toISOString()};
+  await dbPut('study_progress_v1',studyProgress);
+  const el=$('#lessonProgressStatus');if(el)el.textContent=b.dataset.studyState==="understood"?
+   "Marked as understood. Now practise related questions.":"Marked for revision. Return after reviewing examples and questions.";
+ });
 }
-
 function renderToolsContent(s){return window.SILETOOLS?window.SILETOOLS.catalog(s.code):'<p>Private tools unavailable.</p>'}
 function renderTools(){
  if(!DATA)return;
@@ -182,24 +266,71 @@ function rankText(it,q){const terms=q.toLowerCase().split(/\s+/).filter(Boolean)
 function runGlobalSearch(){const q=$('#globalSearch').value.trim();const box=$('#searchResults');if(!q){box.innerHTML='';return}let a=flat.filter(x=>x.paper===paper&&(!subject||x.code===subject)&&(!searchType||x.type===searchType));a=a.map(x=>[rankText(x,q),x]).filter(x=>x[0]>0).sort((a,b)=>b[0]-a[0]).slice(0,100).map(x=>x[1]);lastList=a;box.innerHTML='<div class="listHeader"><h2>Results</h2><div class="listCount">'+a.length+' results</div></div><div class="contentList">'+a.map((it,i)=>'<button class="contentRow" data-searchindex="'+i+'"><div class="rowTop"><span class="rowType">'+esc(it.type)+'</span><span class="rowMeta">'+esc(it.subject)+'</span></div><div class="rowTitle">'+esc(it.title)+'</div><div class="rowExcerpt">'+esc(it.text).slice(0,260)+'</div></button>').join('')+'</div>';$$('[data-searchindex]').forEach(b=>b.onclick=()=>openSearchItem(lastList[Number(b.dataset.searchindex)]))}
 function openSearchItem(it){subject=it.code;renderSubjects();updateContext();if(it.type==='QUESTION')openQuestion(it.obj);else if(it.type==='RULE')openRule(it.obj);else if(it.type==='DEADLINE')openDeadline(it.obj);else if(it.type==='PROCEDURE')openProcedure(it.obj);else if(it.type==='TRAP')openTrap(it.obj)}
 
-function renderData(){setScreen('<div class="dataPanel"><div class="eyebrow">Offline data</div><h1 class="pageTitle">Local dataset</h1><p><strong>'+questionCount()+' questions</strong> are stored locally in IndexedDB on this iPad.</p><div class="dataActions"><button id="replaceData" class="primaryButton">Replace verified JSON</button><button id="backupData" class="secondaryButton">Export backup</button></div><div class="dataNote">The public GitHub Pages site contains only the application shell. Your imported SILE dataset is not uploaded to GitHub.</div></div>');$('#replaceData').onclick=()=>$('#fileInput').click();$('#backupData').onclick=backup}
+function renderData(){
+ const topics=Object.values(studyProgress.topics||{}),questions=Object.values(studyProgress.questions||{});
+ const known=topics.filter(x=>x.state==="understood").length,needs=topics.filter(x=>x.state==="needs-review").length;
+ setScreen('<div class="dataPanel"><div class="eyebrow">Offline data</div><h1 class="pageTitle">Local content and revision progress</h1>'+
+ '<p><strong>'+questionCount()+' questions</strong> are stored locally in IndexedDB on this iPad. No dataset or progress is sent to GitHub.</p>'+
+ '<div class="paperStats"><div class="statPill"><strong>'+known+'</strong>lessons understood</div>'+
+ '<div class="statPill"><strong>'+needs+'</strong>topics for revision</div><div class="statPill"><strong>'+questions.length+'</strong>questions attempted</div></div>'+
+ '<div class="dataActions"><button id="replaceData" class="primaryButton">Replace verified JSON</button>'+
+ '<button id="backupData" class="secondaryButton">Export dataset backup</button>'+
+ '<button id="exportProgress" class="secondaryButton">Export revision progress</button></div>'+
+ '<label class="calcField"><span>Restore revision progress from backup</span><input id="progressImport" type="file" accept=".json,application/json"></label>'+
+ '<div class="dataNote"><strong>Legal-content release warning:</strong> The imported 8 November dataset predates the final Taxation Contact Session and later answer-status audits. Do not mistake local availability for legal-content certification.</div>'+
+ '<div class="dataNote"><strong>Exam rules:</strong> The SILE examination brief prohibits AI-powered search engines and answer-generating applications during the examinations. This app is a revision system; any exam use requires checking the permitted reference-material rules.</div>'+
+ '<p class="readerMeta">Search runs locally over existing material; a language model and semantic embeddings are not installed or verified in this build.</p></div>');
+ $('#replaceData').onclick=()=>$('#fileInput').click();
+ $('#backupData').onclick=backup;$('#exportProgress').onclick=exportStudyProgress;
+ $('#progressImport').onchange=async e=>{
+  const file=e.target.files?.[0];if(!file)return;
+  try{const x=JSON.parse(await file.text());
+   if(x.version!==1||!x.topics||!x.questions||Array.isArray(x.topics)||Array.isArray(x.questions))throw new Error("Invalid progress backup");
+   studyProgress=x;await dbPut('study_progress_v1',studyProgress);toast("Revision progress restored");renderData()
+  }catch(err){alert("Progress restore failed: "+err.message)}
+ };
+}
+function renderProgress(){
+ const topics=studyProgress.topics||{},questions=studyProgress.questions||{};
+ const summaries=DATA.subjects.filter(s=>s.paper===paper).map(s=>{
+  const all=asList(s.topics),understood=all.filter(t=>topics[t.id]?.state==="understood").length,
+    weak=all.filter(t=>topics[t.id]?.state==="needs-review").length;
+  const attempts=asList(s.questions).filter(q=>questions[q.id]);
+  const official=asList(s.questions).filter(q=>q.answer_status==="OFFICIAL"&&questions[q.id]);
+  const scored=official.reduce((n,q)=>n+(questions[q.id]?.officialCorrect||0),0);
+  const officialAttempts=official.reduce((n,q)=>n+(questions[q.id]?.attempts||0),0);
+  return '<section class="readSection"><h2>'+esc(s.subject)+'</h2><p>'+understood+'/'+all.length+' lessons understood; '+weak+' need revision. '+attempts.length+' questions attempted.'+
+   (officialAttempts?' Official-answer attempts: '+scored+'/'+officialAttempts+' matching the key.':"")+'</p></section>';
+ }).join("");
+ setScreen('<div class="eyebrow">Revision progress · Paper '+paper+'</div><h1 class="pageTitle">What I understand and what to revise</h1>'+
+ '<p class="pageLead">Only questions with official SILE answers contribute to scored accuracy. Derived-answer comparisons and unresolved questions are not counted as officially correct or incorrect.</p>'+
+ summaries+'<div class="dataActions"><button class="secondaryButton" id="exportProgressPage">Export progress</button></div>');
+ $('#exportProgressPage').onclick=exportStudyProgress;
+}
+function exportStudyProgress(){
+ const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(studyProgress,null,2)],{type:"application/json"}));
+ a.href=url;a.download="SILE_Revision_Progress_2026.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
 function renderSetup(){setScreen('<div class="dataPanel"><div class="eyebrow">Setup</div><h1 class="pageTitle">Import verified SILE data</h1><p>Import the verified JSON once. The dataset is then stored locally on this iPad.</p><div class="dataActions"><button id="importNow" class="primaryButton">Choose JSON file</button></div></div>');$('#importNow').onclick=()=>$('#fileInput').click()}
 
 async function importFile(file){const o=JSON.parse(await file.text());if(!Array.isArray(o.subjects)||o.subjects.length!==8)throw new Error('Expected 8-subject SILE dataset');const q=o.subjects.reduce((n,s)=>n+asList(s.questions).length,0);if(q!==323)throw new Error('Expected 323 questions, found '+q);await dbPut('dataset',o);DATA=o;flatten();subject='';activeTab=mode==='learn'?'learn':'overview';updateStatus();renderSubjects();updateContext();renderPaperDashboard();toast('Verified dataset stored locally')}
 async function backup(){if(!DATA)return;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(DATA)],{type:'application/json'}));a.download='SILE_iPad_dataset_backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 
 function bindStatic(){
-  $$('[data-paper]').forEach(b=>b.onclick=()=>{paper=Number(b.dataset.paper);subject='';activeTab=mode==='learn'?'learn':'overview';document.body.classList.remove('focusMode');$$('[data-paper]').forEach(x=>x.classList.toggle('active',x===b));renderSubjects();updateContext();renderPaperDashboard()});
-  $$('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;activeTab=mode==='learn'?'learn':'overview';document.body.classList.remove('focusMode');$$('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));updateContext();if(subject)renderSubjectDashboard();else renderPaperDashboard()});
-  $('#searchBtn').onclick=()=>{document.body.classList.remove('focusMode');renderSearch()};
-  $('#stuckBtn').onclick=()=>window.SILEFIND.render();
-  $('#aiBtn').onclick=()=>window.SILEFIND.aiStatus();
+  $$('[data-paper]').forEach(b=>b.onclick=()=>{paper=Number(b.dataset.paper);subject='';activeTab=mode==='learn'?'learn':'overview';document.body.classList.remove('focusMode');$$('[data-paper]').forEach(x=>x.classList.toggle('active',x===b));renderSubjects();updateContext();renderPaperDashboard();document.body.classList.remove('navOpen')});
+  $('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;activeTab=mode==='learn'?'learn':'overview';document.body.classList.remove('focusMode');$$('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));updateContext();if(subject)renderSubjectDashboard();else renderPaperDashboard()});
+  $('#searchBtn').onclick=()=>{document.body.classList.remove('focusMode');window.SILEFIND.render()};
+  const navToggle=$('#navToggle');navToggle.onclick=()=>{
+    document.body.classList.toggle('navOpen');
+    navToggle.setAttribute('aria-expanded',String(document.body.classList.contains('navOpen')));
+  };
+  $('#progressBtn').onclick=()=>{document.body.classList.remove('focusMode');document.body.classList.remove('navOpen');renderProgress()};
   $('#statusBtn').onclick=()=>{document.body.classList.remove('focusMode');renderData()};
   $('#toolsBtn').onclick=()=>{if(DATA){document.body.classList.remove('focusMode');renderTools()}};
   $('#dataBtn').onclick=()=>{if(DATA){document.body.classList.remove('focusMode');renderData()}};
   $('#fileInput').onchange=async e=>{const f=e.target.files&&e.target.files[0];try{if(f)await importFile(f)}catch(err){alert('Import failed: '+err.message)}finally{e.target.value=''}};
-  document.addEventListener('keydown',e=>{if(e.key==='/'&&!/input|textarea/i.test(document.activeElement.tagName)){e.preventDefault();renderSearch()}});
+  document.addEventListener('keydown',e=>{if(e.key==='/'&&!/input|textarea/i.test(document.activeElement.tagName)){e.preventDefault();window.SILEFIND.render()}});
 }
 
-async function init(){await openDB();DATA=await dbGet('dataset');if(DATA)flatten();if(window.SILETOOLS)await window.SILETOOLS.restore();updateStatus();renderSubjects();updateContext();bindStatic();if(DATA)renderPaperDashboard();else renderSetup();if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{})}
+async function init(){await openDB();studyProgress=await dbGet('study_progress_v1')||{version:1,topics:{},questions:{}};DATA=await dbGet('dataset');if(DATA)flatten();if(window.SILETOOLS)await window.SILETOOLS.restore();updateStatus();renderSubjects();updateContext();bindStatic();if(DATA)renderPaperDashboard();else renderSetup();if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{})}
 init();
