@@ -61,7 +61,7 @@ function catalog(code){
  const install='<div class="privateInstall"><p><strong>Private tools package:</strong> '+mark()+'</p>'+
   (loaded?'<p>53 calculators / 16 legal decision tools · '+testResult.count+' passing tests · locally stored on this iPad.</p>':
   '<p>Import the private SILE tools file from Files once. The GitHub app contains no private formulas, source materials or legal decision rules.</p>')+
-  '<button class="primaryButton" id="privateEngineImport">'+(loaded?"Replace private tools package":"Import private tools package")+'</button></div>';
+  '<label class="calcField"><span>'+(loaded?"Replace verified package":"Choose verified private tools package")+'</span><input id="privateEngineImportFile" type="file" accept=".js,text/javascript,application/javascript"><small>Choose SILE_Private_Tools_2026-11-08.js from Files</small></label></div>';
  if(!loaded){
    return install+'<p class="dataNote">The old Tools screen listed descriptions without running calculations. Importing the verified private package enables real inputs, validation, workings and decision trees. No information is uploaded.</p>';
  }
@@ -71,7 +71,7 @@ function catalog(code){
  '<h2 class="sectionTitle">Guided legal tests ('+d.length+')</h2><div class="toolLaunchGrid">'+(dec||"<p>None for this subject.</p>")+'</div>';
 }
 function bind(){
- const b=document.getElementById("privateEngineImport");if(b)b.onclick=picker;
+ const b=document.getElementById("privateEngineImportFile");if(b)b.onchange=async()=>{const f=b.files&&b.files[0];try{if(f)await importFile(f)}catch(err){alert("Private tools import failed: "+err.message)}finally{if(b.isConnected)b.value=""}};
  document.querySelectorAll("[data-calc]").forEach(x=>x.onclick=()=>openCalc(x.dataset.calc));
  document.querySelectorAll("[data-decision]").forEach(x=>x.onclick=()=>openDecision(x.dataset.decision));
 }
