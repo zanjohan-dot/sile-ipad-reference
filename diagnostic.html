@@ -42,6 +42,7 @@ button:active{background:#0c4064}#touchStatus{font-weight:700;min-height:28px}pr
 (function(){
 "use strict";
 let taps=0, lastReport="";
+const timed=(p,label,ms=7000)=>Promise.race([p,new Promise((_,reject)=>setTimeout(()=>reject(new Error(label+" timed out")),ms))]);
 const $=id=>document.getElementById(id);
 $("touch").addEventListener("click",()=>{taps++;$("touchStatus").textContent="Touch works - "+taps+" tap(s)";});
 async function checkData(){
@@ -74,9 +75,9 @@ async function checkData(){
 }
 async function checkFile(path){
  try{
-  const r=await fetch("./"+path+"?diag="+Date.now(),{cache:"no-store"});
+  const r=await timed(fetch("./"+path+"?diag="+Date.now(),{cache:"no-store"}),"File request");
   if(!r.ok)return "HTTP "+r.status;
-  const t=await r.text();
+  const t=await timed(r.text(),"File response");
   if(path==="app.js") return "HTTP 200; "+t.length+" chars; new startup: "+(t.includes("window.SILE_APP_READY = true")?"yes":"NO");
   if(path==="sw.js") return "HTTP 200; "+(t.match(/sile-study-v[0-9]+/)||["unknown"])[0];
   return "HTTP 200; "+t.length+" chars";
@@ -90,12 +91,12 @@ async function run(){
  if("serviceWorker" in navigator){
   try{
    lines.push("Current controller: "+(navigator.serviceWorker.controller?.scriptURL||"none"));
-   const regs=await navigator.serviceWorker.getRegistrations();
+   const regs=await timed(navigator.serviceWorker.getRegistrations(),"Service worker check");
    lines.push("Service worker registrations: "+regs.map(r=>r.scope).join(", "));
   }catch(e){lines.push("Service worker inspection: "+e.message)}
  }
  if("caches" in window){
-  try{lines.push("SILE caches: "+(await caches.keys()).filter(k=>k.startsWith("sile-")).join(", "))}
+  try{lines.push("SILE caches: "+(await timed(caches.keys(),"Cache check")).filter(k=>k.startsWith("sile-")).join(", "))}
   catch(e){lines.push("Cache inspection: "+e.message)}
  }
  lines.push("Offline storage: "+await checkData());
