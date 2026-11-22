@@ -421,7 +421,7 @@ async function backup(){if(!DATA)return;const a=document.createElement('a');a.hr
 
 function bindStatic(){
   $$('[data-paper]').forEach(b=>b.onclick=()=>{paper=Number(b.dataset.paper);subject='';activeTab='overview';document.body.classList.remove('focusMode');$$('[data-paper]').forEach(x=>x.classList.toggle('active',x===b));renderSubjects();updateContext();renderPaperDashboard();document.body.classList.remove('navOpen')});
-  $('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;activeTab='overview';referenceCategory='RULE';document.body.classList.remove('focusMode');$$('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));updateContext();if(subject)renderSubjectDashboard();else renderPaperDashboard()});
+  $$('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;activeTab='overview';referenceCategory='RULE';document.body.classList.remove('focusMode');$$('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));updateContext();if(subject)renderSubjectDashboard();else renderPaperDashboard()});
   $('#searchBtn').onclick=()=>{document.body.classList.remove('focusMode');window.SILEFIND.render()};
   const navToggle=$('#navToggle');navToggle.onclick=()=>{
     document.body.classList.toggle('navOpen');
