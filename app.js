@@ -27,7 +27,7 @@ function setScreen(html){$('#screen').innerHTML='<div class="screenInner">'+html
 function currentSubject(){return DATA?DATA.subjects.find(s=>s.code===subject):null}
 function topicMeta(s,id){return asList(s&&s.topics).find(t=>t.id===id)||null}
 function questionCount(){return DATA?DATA.subjects.reduce((n,s)=>n+asList(s.questions).length,0):0}
-function updateStatus(){$('#statusBtn').textContent=DATA?'Offline - '+questionCount()+' questions':'No data'}
+function updateStatus(){$('#statusBtn').textContent=DATA?'Local data · '+questionCount()+' questions':'No local data'}
 function updateContext(){const s=currentSubject();const m=mode==='rapid'?'Rapid':'Learn';$('#contextLabel').textContent=s?'Paper '+paper+' - '+s.subject+' - '+m:'Paper '+paper+' - '+m}
 
 function flatten(){
@@ -382,7 +382,7 @@ function renderData(){
  '<label class="calcField"><span>Restore revision progress from backup</span><input id="progressImport" type="file" accept=".json,application/json"></label>'+
  '<div class="dataNote"><strong>Legal-content release warning:</strong> The imported 8 November dataset predates the final Taxation Contact Session and later answer-status audits. Do not mistake local availability for legal-content certification.</div>'+
  '<div class="dataNote"><strong>Exam rules:</strong> The SILE examination brief prohibits AI-powered search engines and answer-generating applications during the examinations. This app is a revision system; any exam use requires checking the permitted reference-material rules.</div>'+
- '<p class="readerMeta">Search runs locally over existing material; a language model and semantic embeddings are not installed or verified in this build.</p></div>');
+ '<p class="readerMeta">The Search page can install an optional on-device explanation model for revision. Its offline relaunch has not been verified on this iPad. Semantic-embedding retrieval is not installed.</p></div>');
  $('#replaceData').onclick=()=>$('#fileInput').click();
  $('#backupData').onclick=backup;$('#exportProgress').onclick=exportStudyProgress;
  $('#progressImport').onchange=async e=>{
