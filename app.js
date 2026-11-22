@@ -68,7 +68,7 @@ function renderPaperDashboard(){
 function renderSubjectDashboard(){
   const s=currentSubject();if(!s)return renderPaperDashboard();
   const st=subjectStats(s);
-  const tabs=[['overview','Overview'],['learn','Learn'],['questions','Questions'],['rules','Rules'],['deadlines','Deadlines'],['traps','Traps'],['tools','Tools']];
+  const tabs=[['overview','Overview'],['learn','Learn'],['questions','Questions'],['rules','Rules'],['deadlines','Deadlines'],['procedures','Procedures'],['traps','Traps'],['tools','Tools']];
   let tabHtml=tabs.map(t=>'<button data-tab="'+t[0]+'" class="'+(activeTab===t[0]?'active':'')+'">'+t[1]+'</button>').join('');
   let body='';
   if(activeTab==='overview')body=renderSubjectOverview(s);
@@ -76,6 +76,7 @@ function renderSubjectDashboard(){
   if(activeTab==='questions')body=renderQuestionList(s);
   if(activeTab==='rules')body=renderGenericList(s,'RULE',asList(s.rules));
   if(activeTab==='deadlines')body=renderGenericList(s,'DEADLINE',asList(s.deadlines));
+  if(activeTab==='procedures')body=renderGenericList(s,'PROCEDURE',asList(s.procedures));
   if(activeTab==='traps')body=renderGenericList(s,'TRAP',asList(s.traps));
   if(activeTab==='tools')body=renderToolsContent(s);
   setScreen('<div class="subjectHeader"><div class="subjectHeaderTop"><div><div class="eyebrow">Paper '+paper+'</div><h1 class="pageTitle">'+esc(s.subject)+'</h1><p class="pageLead">'+(mode==='rapid'?'Exam-focused reference. Start with Overview, then jump directly to questions, rules, deadlines or traps.':'Structured study mode. Start with Learn, then test yourself using Questions.')+'</p></div><div class="subjectStats"><div class="statPill"><strong>'+st.q+'</strong>questions</div><div class="statPill"><strong>'+st.l+'</strong>lessons</div></div></div><div class="tabBar">'+tabHtml+'</div></div>'+body);
@@ -118,14 +119,14 @@ function renderQuestionList(s){
 }
 
 function renderGenericList(s,type,items){
-  const label=type==='RULE'?'Rules':type==='DEADLINE'?'Deadlines':'Exam traps';
-  let rows=items.map((x,i)=>{let title='';let excerpt='';if(type==='RULE'){title=x.title||x.id||'Rule';excerpt=x.rule||''}if(type==='DEADLINE'){title=x.action||x.title||'Deadline';excerpt=[x.deadline,x.start,x.consequence].filter(Boolean).join(' - ')}if(type==='TRAP'){title=x.trap||x.title||'Exam trap';excerpt=x.rule||x.spot||x.attractive||''}return '<button class="contentRow" data-kind="'+type.toLowerCase()+'" data-index="'+i+'"><div class="rowTop"><span class="rowType">'+type+'</span><span class="rowMeta">'+esc(x.topic||'')+'</span></div><div class="rowTitle">'+esc(title)+'</div><div class="rowExcerpt">'+esc(excerpt).slice(0,280)+'</div></button>'}).join('');
+  const label=type==='RULE'?'Rules':type==='DEADLINE'?'Deadlines':type==='PROCEDURE'?'Procedures':'Exam traps';
+  let rows=items.map((x,i)=>{let title='';let excerpt='';if(type==='RULE'){title=x.title||x.id||'Rule';excerpt=x.rule||''}if(type==='DEADLINE'){title=x.action||x.title||'Deadline';excerpt=[x.deadline,x.start,x.consequence].filter(Boolean).join(' - ')}if(type==='PROCEDURE'){title=x.title||x.name||x.action||'Procedure';excerpt=[x.steps,x.procedure,x.when,x.detail,x.source].filter(Boolean).map(v=>Array.isArray(v)?v.join(' '):String(v)).join(' - ')}if(type==='TRAP'){title=x.trap||x.title||'Exam trap';excerpt=x.rule||x.spot||x.attractive||''}return '<button class="contentRow" data-kind="'+type.toLowerCase()+'" data-index="'+i+'"><div class="rowTop"><span class="rowType">'+type+'</span><span class="rowMeta">'+esc(x.topic||'')+'</span></div><div class="rowTitle">'+esc(title)+'</div><div class="rowExcerpt">'+esc(excerpt).slice(0,280)+'</div></button>'}).join('');
   return '<div class="listHeader"><div><div class="eyebrow">'+esc(s.subject)+'</div><h2>'+label+'</h2></div><div class="listCount">'+items.length+' items</div></div><div class="contentList">'+rows+'</div>';
 }
 
 function bindRows(){
   $$('.lessonCard').forEach(b=>b.onclick=()=>openLesson(b.dataset.topic));
-  $$('.contentRow').forEach(b=>b.onclick=()=>{const s=currentSubject();const i=Number(b.dataset.index);const kind=b.dataset.kind;if(kind==='question')openQuestion(asList(s.questions)[i]);if(kind==='rule')openRule(asList(s.rules)[i]);if(kind==='deadline')openDeadline(asList(s.deadlines)[i]);if(kind==='trap')openTrap(asList(s.traps)[i])});
+  $$('.contentRow').forEach(b=>b.onclick=()=>{const s=currentSubject();const i=Number(b.dataset.index);const kind=b.dataset.kind;if(kind==='question')openQuestion(asList(s.questions)[i]);if(kind==='rule')openRule(asList(s.rules)[i]);if(kind==='deadline')openDeadline(asList(s.deadlines)[i]);if(kind==='procedure')openProcedure(asList(s.procedures)[i]);if(kind==='trap')openTrap(asList(s.traps)[i])});
 }
 
 function enterFocus(){previousView={subject,activeTab};document.body.classList.add('focusMode')}
@@ -145,6 +146,7 @@ function openQuestion(q){
 
 function openRule(r){enterFocus();setScreen('<div class="reader">'+focusHeader()+'<div class="readerMeta">Rule - '+esc(r.topic||'')+'</div><h1 class="pageTitle">'+esc(r.title||r.id||'Rule')+'</h1>'+section('Core rule',r.rule,'rule')+section('When it applies',r.when,'')+section('Triggers',r.triggers,'')+section('Exception',r.exception,'')+section('Deadline',r.deadline,'')+section('Procedure',r.procedure,'')+section('Exam trap',r.trap,'trap')+section('Source',r.source,'')+section('Verification note',r.verify,'warning')+section('Detail',r.detail,'')+'</div>');bindBack()}
 function openDeadline(d){enterFocus();setScreen('<div class="reader">'+focusHeader()+'<div class="readerMeta">Deadline - '+esc(d.topic||'')+'</div><h1 class="pageTitle">'+esc(d.action||d.title||'Deadline')+'</h1>'+section('Deadline',d.deadline,'rule')+section('Starts from',d.start,'')+section('Exception',d.exception,'')+section('Consequence',d.consequence,'trap')+section('Source',d.source,'')+'</div>');bindBack()}
+function openProcedure(p){enterFocus();let steps=p.steps||p.procedure||p.process||p.detail||'';setScreen('<div class="reader">'+focusHeader()+'<div class="readerMeta">Procedure - '+esc(p.topic||'')+'</div><h1 class="pageTitle">'+esc(p.title||p.name||p.action||'Procedure')+'</h1>'+section('When to use it',p.when||p.trigger||'','')+section('Procedure',Array.isArray(steps)?steps:String(steps),'rule')+section('Deadline',p.deadline||p.time_limit||'','')+section('Exam point',p.trap||p.exam_point||'','trap')+section('Source',p.source||'','')+'</div>');bindBack()}
 function openTrap(t){enterFocus();setScreen('<div class="reader">'+focusHeader()+'<div class="readerMeta">Exam trap - '+esc(t.topic||'')+'</div><h1 class="pageTitle">'+esc(t.trap||t.title||'Exam trap')+'</h1>'+section('Why it is attractive',t.attractive,'')+section('Correct rule',t.rule,'rule')+section('How to spot it',t.spot,'trap')+section('Related questions',asList(t.related_q),'')+section('Source',t.source,'')+'</div>');bindBack()}
 
 function openLesson(topicId){
@@ -168,14 +170,14 @@ function renderTools(){const s=currentSubject();if(s){activeTab='tools';renderSu
 function renderSearch(){
   if(!DATA)return;
   searchType='';
-  setScreen('<div class="searchPanel"><div class="eyebrow">Search</div><h1 class="pageTitle">Find material quickly</h1><input id="globalSearch" class="searchInput" type="search" autocomplete="off" placeholder="Search rule, question, deadline, trap, phrase..."><div class="searchScope"><button data-searchtype="" class="active">All</button><button data-searchtype="QUESTION">Questions</button><button data-searchtype="RULE">Rules</button><button data-searchtype="DEADLINE">Deadlines</button><button data-searchtype="TRAP">Traps</button></div><div id="searchResults" class="searchResults"></div></div>');
+  setScreen('<div class="searchPanel"><div class="eyebrow">Search</div><h1 class="pageTitle">Find material quickly</h1><input id="globalSearch" class="searchInput" type="search" autocomplete="off" placeholder="Search rule, question, deadline, trap, phrase..."><div class="searchScope"><button data-searchtype="" class="active">All</button><button data-searchtype="QUESTION">Questions</button><button data-searchtype="RULE">Rules</button><button data-searchtype="DEADLINE">Deadlines</button><button data-searchtype="PROCEDURE">Procedures</button><button data-searchtype="TRAP">Traps</button></div><div id="searchResults" class="searchResults"></div></div>');
   $('#globalSearch').focus();
   $$('.searchScope button').forEach(b=>b.onclick=()=>{searchType=b.dataset.searchtype;$$('.searchScope button').forEach(x=>x.classList.toggle('active',x===b));runGlobalSearch()});
   $('#globalSearch').oninput=runGlobalSearch;
 }
 function rankText(it,q){const terms=q.toLowerCase().split(/\s+/).filter(Boolean);const title=String(it.title||'').toLowerCase();const text=String(it.text||'').toLowerCase();let score=0;terms.forEach(t=>{if(title.includes(t))score+=8;if(text.includes(t))score+=2});return score}
 function runGlobalSearch(){const q=$('#globalSearch').value.trim();const box=$('#searchResults');if(!q){box.innerHTML='';return}let a=flat.filter(x=>x.paper===paper&&(!subject||x.code===subject)&&(!searchType||x.type===searchType));a=a.map(x=>[rankText(x,q),x]).filter(x=>x[0]>0).sort((a,b)=>b[0]-a[0]).slice(0,100).map(x=>x[1]);lastList=a;box.innerHTML='<div class="listHeader"><h2>Results</h2><div class="listCount">'+a.length+' results</div></div><div class="contentList">'+a.map((it,i)=>'<button class="contentRow" data-searchindex="'+i+'"><div class="rowTop"><span class="rowType">'+esc(it.type)+'</span><span class="rowMeta">'+esc(it.subject)+'</span></div><div class="rowTitle">'+esc(it.title)+'</div><div class="rowExcerpt">'+esc(it.text).slice(0,260)+'</div></button>').join('')+'</div>';$$('[data-searchindex]').forEach(b=>b.onclick=()=>openSearchItem(lastList[Number(b.dataset.searchindex)]))}
-function openSearchItem(it){subject=it.code;renderSubjects();updateContext();if(it.type==='QUESTION')openQuestion(it.obj);else if(it.type==='RULE')openRule(it.obj);else if(it.type==='DEADLINE')openDeadline(it.obj);else if(it.type==='TRAP')openTrap(it.obj)}
+function openSearchItem(it){subject=it.code;renderSubjects();updateContext();if(it.type==='QUESTION')openQuestion(it.obj);else if(it.type==='RULE')openRule(it.obj);else if(it.type==='DEADLINE')openDeadline(it.obj);else if(it.type==='PROCEDURE')openProcedure(it.obj);else if(it.type==='TRAP')openTrap(it.obj)}
 
 function renderData(){setScreen('<div class="dataPanel"><div class="eyebrow">Offline data</div><h1 class="pageTitle">Local dataset</h1><p><strong>'+questionCount()+' questions</strong> are stored locally in IndexedDB on this iPad.</p><div class="dataActions"><button id="replaceData" class="primaryButton">Replace verified JSON</button><button id="backupData" class="secondaryButton">Export backup</button></div><div class="dataNote">The public GitHub Pages site contains only the application shell. Your imported SILE dataset is not uploaded to GitHub.</div></div>');$('#replaceData').onclick=()=>$('#fileInput').click();$('#backupData').onclick=backup}
 function renderSetup(){setScreen('<div class="dataPanel"><div class="eyebrow">Setup</div><h1 class="pageTitle">Import verified SILE data</h1><p>Import the verified JSON once. The dataset is then stored locally on this iPad.</p><div class="dataActions"><button id="importNow" class="primaryButton">Choose JSON file</button></div></div>');$('#importNow').onclick=()=>$('#fileInput').click()}
