@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#15324a">
+<meta name="theme-color" content="#17324a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="SILE 2026">
@@ -13,52 +13,40 @@
 <title>SILE Part B 2026</title>
 </head>
 <body>
-<header class="topbar">
-  <div class="brand"><b>SILE Part B 2026</b><span id="contextLabel">Offline reference</span></div>
-  <div class="mode">
+<header class="appHeader">
+  <div class="brandBlock">
+    <div class="brandTitle">SILE Part B 2026</div>
+    <div id="contextLabel" class="brandContext">Offline reference</div>
+  </div>
+  <div class="modeSwitch" aria-label="Study mode">
     <button data-mode="rapid" class="active">Rapid</button>
     <button data-mode="learn">Learn</button>
   </div>
-  <button id="statusBtn" class="status">No data</button>
+  <button id="searchBtn" class="headerAction">Search</button>
+  <button id="statusBtn" class="offlineBadge">No data</button>
 </header>
 
-<div class="layout">
-  <aside class="sidebar">
-    <div class="paperTabs">
+<div class="appShell">
+  <aside id="sidebar" class="sidebar">
+    <div class="paperSwitch">
       <button data-paper="1" class="active">Paper 1</button>
       <button data-paper="2">Paper 2</button>
     </div>
-    <div class="navLabel">Subjects</div>
-    <nav id="subjects"></nav>
-    <div class="sideActions">
-      <button id="toolsBtn">Tools & calculators</button>
-      <button id="dataBtn">Data & offline status</button>
+    <div class="sideLabel">Subjects</div>
+    <nav id="subjects" class="subjectNav"></nav>
+    <div class="sideFooter">
+      <button id="toolsBtn" class="sideUtility">Tools</button>
+      <button id="dataBtn" class="sideUtility">Offline data</button>
     </div>
   </aside>
 
-  <main class="workspace">
-    <div class="searchBar">
-      <div>
-        <label for="search">Search</label>
-        <input id="search" type="search" autocomplete="off" placeholder="Rule, section, deadline, question, trap…">
-      </div>
-      <div class="filters">
-        <button data-filter="" class="filterChip active">All</button>
-        <button data-filter="RULE" class="filterChip">Rules</button>
-        <button data-filter="QUESTION" class="filterChip">Questions</button>
-        <button data-filter="DEADLINE" class="filterChip">Deadlines</button>
-        <button data-filter="TRAP" class="filterChip">Traps</button>
-      </div>
-    </div>
-
-    <div id="workspaceBody" class="workspaceBody">
-      <section id="screen"></section>
-    </div>
+  <main class="mainArea">
+    <div id="screen" class="screen"></div>
   </main>
 </div>
 
 <input id="fileInput" type="file" accept="application/json,.json" hidden>
-<div id="toast" role="status" aria-live="polite"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script src="app.js" defer></script>
 </body>
 </html>
