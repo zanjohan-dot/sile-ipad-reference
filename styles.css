@@ -184,3 +184,25 @@ body.focusMode .screen{padding-left:44px;padding-right:44px}
   .learnGrid{grid-template-columns:1fr}
 }
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+/* v11: private local tools and reference finder */
+.urgentAction{background:#fff;color:#163b57;border-color:#fff;font-weight:850}
+.secondaryAction{opacity:.8}
+.findPage{max-width:980px;margin:0 auto}
+.findLabel,.calcField span{display:block;font-size:.8rem;font-weight:800;color:#52616d;margin-bottom:6px}
+.findPage textarea{display:block;width:100%;min-height:120px;resize:vertical;font:inherit;line-height:1.5;padding:13px;border:2px solid #c5d0d8;border-radius:11px;background:#fff}
+.findControls{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:13px}
+.findControls label{display:flex;gap:7px;align-items:center;font-size:.86rem}
+.findControls input[type=checkbox]{width:20px;height:20px}
+.toolLaunchGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+.toolLaunch{width:100%;min-height:100px;border:1px solid var(--line);background:#fff;text-align:left;padding:14px;border-radius:11px}
+.toolLaunch strong,.toolLaunch small{display:block;margin-top:6px}
+.toolLaunch small{font-size:.82rem;color:var(--muted)}
+.privateInstall{background:#edf4f9;border:1px solid #c9dce9;padding:15px;border-radius:12px;margin-bottom:20px}
+.privateInstall p{margin:5px 0 10px}
+.calcForm{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;background:#fff;border:1px solid var(--line);padding:18px;border-radius:12px;margin:14px 0}
+.calcForm>.dataActions{grid-column:1 / -1}
+.calcField{display:block;min-width:0}
+.calcField input,.calcField select{width:100%;height:46px;border:1px solid #aabdc9;border-radius:9px;padding:7px 12px;background:#fff;font-size:1rem}
+.calcField small{display:block;color:var(--muted);font-size:.75rem;margin-top:5px}
+@media(max-width:1100px){.brandBlock{min-width:165px}.appHeader{gap:7px;padding:8px 10px}.headerAction{padding:0 10px;font-size:.82rem}.offlineBadge{font-size:.72rem}.calcForm{grid-template-columns:1fr}}
+@media(max-width:780px){.urgentAction{font-size:.8rem}.secondaryAction{display:none}}
