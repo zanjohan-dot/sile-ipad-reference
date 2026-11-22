@@ -1,13 +1,14 @@
 /* Local evidence retrieval. No network calls, generated answers, or persistent question storage. */
 (function(){
 "use strict";
-const STOP=new Set("the a an and or but on at in is are was were this that which what with from by to for as of it if can may should would then when where how why have has had be been into does do you your their they we such not only under section act rule company singapore person persons more less question correct following statement statements".split(" "));
+const STOP=new Set("the a an and or but on at in is are was were this that which what with from by to for as of it if can may should would then when where how why have has had be been into does do you your their they we such not only under section act rule persons more less question correct following statement statements".split(" "));
 const E=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const ALIASES={directors:"director",duties:"duty",companies:"company",appeals:"appeal",trademarks:"trademark",questions:"question",acquisitions:"acquisition",shares:"share",remedies:"remedy",transactions:"transaction"};
 const tokens=s=>(String(s||"").toLowerCase().replace(/trade[ -]+marks/g,"trademark").match(/[a-z0-9]+(?:\.[0-9]+)?/g)||[])
  .map(w=>ALIASES[w]||((w.length>4&&w.endsWith("ies"))?w.slice(0,-3)+"y":(w.length>4&&w.endsWith("s")&&!w.endsWith("ss")&&!w.endsWith("us")?w.slice(0,-1):w)))
  .filter(w=>w.length>1&&!STOP.has(w));
 let lastText="",lastMatches=[],lastSubjectScope=false,lastAll=true;
+let cachedFlat=null,cachedDocs=[];
 function open(it){
  subject=it.code;paper=it.paper;document.querySelectorAll("[data-paper]").forEach(b=>b.classList.toggle("active",Number(b.dataset.paper)===paper));renderSubjects();updateContext();
  if(it.type==="RULE")openRule(it.obj);
@@ -22,7 +23,14 @@ function evidence(){
  if(!DATA)return [];
  const all=flat.filter(x=>(lastAll||x.paper===paper)&&(!lastSubjectScope||!subject||x.code===subject));
  const qq=new Set(tokens(lastText));if(!qq.size)return [];
- const docs=all.map(it=>({it,ti:new Set(tokens(it.title)),tx:new Set(tokens(it.text).slice(0,320))}));
+ // Pre-tokenise each record once per imported dataset, including the FULL
+ // question explanation rather than silently discarding words past token 320.
+ if(cachedFlat!==flat){
+  cachedFlat=flat;
+  cachedDocs=flat.map(it=>({it,ti:new Set(tokens(it.title)),tx:new Set(tokens(it.text))}));
+ }
+ const allowed=new Set(all);
+ const docs=cachedDocs.filter(row=>allowed.has(row.it));
  const df=new Map();for(const x of docs)for(const t of new Set([...x.ti,...x.tx]))df.set(t,(df.get(t)||0)+1);
  const n=docs.length,out=[];
  for(const x of docs){
@@ -67,6 +75,7 @@ function sourceExtract(it){
   '<h2>Relevant explanation from your local materials</h2><p class="readerMeta">'+E(it.subject)+' · '+E(it.title)+'</p>'+
   (bits.join("")||'<p>No directly extractable rule is recorded. Open the matching material to review it.</p>')+
   '<p class="sourceMeta"><strong>Recorded source:</strong> '+E(sourceLabel(it))+'</p>'+
+  '<button id="openBestSource" type="button" class="secondaryButton">Open full source record</button>'+
   '<p class="dataNote">This is a source excerpt, not a conclusion on your facts. Verify exceptions, the underlying authority and the latest audited answer status. The imported November 8 dataset has not been cleared for final release.</p></section>';
 }
 function show(){
@@ -90,7 +99,11 @@ function show(){
   questions.push({...it,score:0,matched:[],topicLinked:true});
   used.add(it.obj.id);
  }
- lastMatches=[...sources,...questions];
+ const questionIntent=/\b(question|questions|exam|practice|mcq|option|options|which answer|why is [a-d])\b/i.test(lastText);
+ // The local AI receives the first seven evidence items. A request about
+ // examination options must include question records, not just rule cards.
+ lastMatches=questionIntent?[...questions.slice(0,4),...sources.slice(0,8),...questions.slice(4)]:
+    [...sources.slice(0,4),...questions.slice(0,4),...sources.slice(4),...questions.slice(4)];
  if(!sources.length&&!questions.length){
   box.innerHTML='<div class="emptyHint">No relevant local record was found. Try shorter terms, another subject or a statute number. No answer has been invented.</div>';return;
  }
@@ -112,9 +125,10 @@ function show(){
    (qRows||'<p>No matching examination question was found. Check the subject or alter the query.</p>')+'</section>';
  const srcSection='<section class="readSection"><h2>Supporting source records ('+sources.length+')</h2>'+
    (sourceRows||'<p>No source record was retrieved for this query.</p>')+'</section>';
- const questionIntent=/\b(question|questions|exam|practice|mcq|option|options)\b/i.test(lastText);
  box.innerHTML=sourceExtract(best)+(questionIntent?qSection+srcSection:srcSection+qSection)+
  '<p class="dataNote">Source retrieval is not AI reasoning. A matching phrase is not proof that a rule applies. No answers have been generated or graded by this search.</p>';
+ const openBest=box.querySelector("#openBestSource");
+ if(openBest&&best)openBest.onclick=()=>open(best);
  box.querySelectorAll("[data-source-index]").forEach(b=>b.onclick=()=>open(sources[Number(b.dataset.sourceIndex)]));
  box.querySelectorAll("[data-question-index]").forEach(b=>b.onclick=()=>open(questions[Number(b.dataset.questionIndex)]));
 }
