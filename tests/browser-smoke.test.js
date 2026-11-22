@@ -51,7 +51,7 @@ async function run(){
  });
  await step("User imports 323 synthetic question records",async()=>{
   await page.locator("#fileInput").setInputFiles({name:"synthetic_323.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify(dataset))});
-  await page.locator("#statusBtn").getByText("323 questions").waitFor({timeout:12000});
+  await page.waitForFunction(()=>document.getElementById("statusBtn")?.textContent.includes("323 questions"),null,{timeout:12000});
   check(await page.locator(".rapidHome").count()>0,"Rapid home not shown");
  });
  await step("Paper and mode navigation",async()=>{
@@ -89,19 +89,19 @@ async function run(){
   await page.locator('[data-question-index]').first.click();
   await page.locator('input[name="practiceChoice"]').first.check();
   await page.locator("#submitPractice").click();
-  await page.locator("#practiceFeedback").getByText("saved locally",{exact:false}).waitFor({timeout:10000});
+  await page.waitForFunction(()=>document.getElementById("practiceFeedback")?.textContent.includes("saved locally"),null,{timeout:10000});
   await page.locator("#toggleQuestionReview").click();
-  await page.locator("#questionReviewStatus").getByText("Saved to revision list.",{exact:false}).waitFor({timeout:10000});
+  await page.waitForFunction(()=>document.getElementById("questionReviewStatus")?.textContent.includes("Saved to revision list"),null,{timeout:10000});
   await page.reload({waitUntil:"load"});
-  await page.locator("#statusBtn").getByText("323 questions").waitFor();
+  await page.waitForFunction(()=>document.getElementById("statusBtn")?.textContent.includes("323 questions"));
   await page.locator("#progressBtn").click();
   check((await page.locator("#screen").innerText()).includes("questions marked for revision"),"Revision progress not persisted");
  });
  await step("Actual Chromium offline PWA relaunch",async()=>{
-  await page.waitForFunction(()=>'serviceWorker' in navigator && navigator.serviceWorker.controller!==null,{timeout:20000});
+  await page.waitForFunction(()=>'serviceWorker' in navigator && navigator.serviceWorker.controller!==null,null,{timeout:20000});
   await context.setOffline(true);
   await page.reload({waitUntil:"domcontentloaded",timeout:18000});
-  await page.locator("#statusBtn").getByText("323 questions").waitFor({timeout:10000});
+  await page.waitForFunction(()=>document.getElementById("statusBtn")?.textContent.includes("323 questions"),null,{timeout:10000});
   await page.locator("#searchBtn").click();
   await page.locator("#findQuery").fill("fiduciary duties");
   await page.locator("#findNow").click();
