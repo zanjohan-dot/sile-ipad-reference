@@ -106,7 +106,7 @@ function renderPaperDashboard(){
   $('#rapidSearchHome').onclick=()=>window.SILEFIND.render();
  }
  $$('.subjectCard[data-subject]').forEach(b=>b.onclick=()=>{
-   subject=b.dataset.subject;activeTab=mode==='learn'?'overview':'overview';referenceCategory='RULE';
+   subject=b.dataset.subject;activeTab='overview';referenceCategory='RULE';
    renderSubjects();updateContext();renderSubjectDashboard();document.body.classList.remove('navOpen');
  });
 }
@@ -416,12 +416,12 @@ function exportStudyProgress(){
 }
 function renderSetup(){setScreen('<div class="dataPanel"><div class="eyebrow">Setup</div><h1 class="pageTitle">Import verified SILE data</h1><p>Import the verified JSON once. The dataset is then stored locally on this iPad.</p><div class="dataActions"><button id="importNow" class="primaryButton">Choose JSON file</button></div></div>');$('#importNow').onclick=()=>$('#fileInput').click()}
 
-async function importFile(file){const o=JSON.parse(await file.text());if(!Array.isArray(o.subjects)||o.subjects.length!==8)throw new Error('Expected 8-subject SILE dataset');const q=o.subjects.reduce((n,s)=>n+asList(s.questions).length,0);if(q!==323)throw new Error('Expected 323 questions, found '+q);await dbPut('dataset',o);DATA=o;flatten();subject='';activeTab=mode==='learn'?'learn':'overview';updateStatus();renderSubjects();updateContext();renderPaperDashboard();toast('Verified dataset stored locally')}
+async function importFile(file){const o=JSON.parse(await file.text());if(!Array.isArray(o.subjects)||o.subjects.length!==8)throw new Error('Expected 8-subject SILE dataset');const q=o.subjects.reduce((n,s)=>n+asList(s.questions).length,0);if(q!==323)throw new Error('Expected 323 questions, found '+q);await dbPut('dataset',o);DATA=o;flatten();subject='';activeTab='overview';updateStatus();renderSubjects();updateContext();renderPaperDashboard();toast('Verified dataset stored locally')}
 async function backup(){if(!DATA)return;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(DATA)],{type:'application/json'}));a.download='SILE_iPad_dataset_backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 
 function bindStatic(){
-  $$('[data-paper]').forEach(b=>b.onclick=()=>{paper=Number(b.dataset.paper);subject='';activeTab=mode==='learn'?'learn':'overview';document.body.classList.remove('focusMode');$$('[data-paper]').forEach(x=>x.classList.toggle('active',x===b));renderSubjects();updateContext();renderPaperDashboard();document.body.classList.remove('navOpen')});
-  $('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;activeTab=mode==='learn'?'learn':'overview';document.body.classList.remove('focusMode');$$('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));updateContext();if(subject)renderSubjectDashboard();else renderPaperDashboard()});
+  $$('[data-paper]').forEach(b=>b.onclick=()=>{paper=Number(b.dataset.paper);subject='';activeTab='overview';document.body.classList.remove('focusMode');$$('[data-paper]').forEach(x=>x.classList.toggle('active',x===b));renderSubjects();updateContext();renderPaperDashboard();document.body.classList.remove('navOpen')});
+  $('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;activeTab='overview';referenceCategory='RULE';document.body.classList.remove('focusMode');$$('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));updateContext();if(subject)renderSubjectDashboard();else renderPaperDashboard()});
   $('#searchBtn').onclick=()=>{document.body.classList.remove('focusMode');window.SILEFIND.render()};
   const navToggle=$('#navToggle');navToggle.onclick=()=>{
     document.body.classList.toggle('navOpen');
