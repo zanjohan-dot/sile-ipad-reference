@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#15324a">
+<title>Reset SILE App Cache</title>
+<style>
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;margin:0;background:#eef3f6;color:#17212b;display:grid;place-items:center;min-height:100vh;padding:24px}
+.card{max-width:620px;background:#fff;border:1px solid #d8e1e7;border-radius:18px;padding:28px}
+h1{margin-top:0}button{font:inherit;background:#1769aa;color:white;border:0;border-radius:10px;padding:12px 16px;font-weight:700}
+#status{margin-top:14px;color:#5f6f7d}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>Refresh SILE 2026</h1>
+<p>This resets the old app shell and service-worker cache. Your imported SILE dataset in IndexedDB is not deleted.</p>
+<button id="reset">Reset old app cache</button>
+<div id="status">Ready.</div>
+</div>
+<script>
+const s=document.getElementById("status");
+document.getElementById("reset").onclick=async()=>{
+  try{
+    s.textContent="Removing old service worker and cached shell…";
+    if("serviceWorker"in navigator){
+      const regs=await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r=>r.unregister()));
+    }
+    if("caches"in window){
+      const keys=await caches.keys();
+      await Promise.all(keys.map(k=>caches.delete(k)));
+    }
+    s.textContent="Reset complete. Opening current SILE build…";
+    setTimeout(()=>location.replace("./?fresh="+Date.now()),500);
+  }catch(e){s.textContent="Reset failed: "+e.message}
+};
+</script>
+</body>
+</html>
