@@ -16,9 +16,14 @@ function panel(){
  '<p class="readerMeta" id="modelStatus">Model not loaded. Offline inference has NOT been verified on this device.</p>'+
  '<div id="modelAnswer" aria-live="polite"></div>'+
  '<p class="dataNote">Revision only. Generated answers may be incorrect and are not official SILE keys. No user question or SILE excerpt is uploaded to a cloud inference API. Model files come from public model hosts during initial setup. The SILE examination rules prohibit AI-powered search and answer generation during examinations.</p></details>';
- $("modelExplain").disabled=!engine;
+ $("modelExplain").disabled=false;
  $("modelInstall").onclick=()=>load().catch(e=>tell(String(e.message||e)));
  $("modelExplain").onclick=explain;
+ if(typeof dbGet==="function")dbGet("local_model_choice").then(id=>{
+   if(!models.includes(id))return;
+   const selected=$("modelPick");if(selected)selected.value=id;
+   tell("Previous local model selection found. Tap Explain retrieved material to reload it from on-device cache. Offline loading is not yet verified.");
+ }).catch(()=>{});
 }
 async function load(){
  if(pending)return pending;
@@ -43,6 +48,7 @@ async function load(){
      initProgressCallback:p=>{if(p?.text)tell(String(p.text))}
    });
    engine=e;loaded=id;
+   if(typeof dbPut==="function")await dbPut("local_model_choice",id).catch(()=>{});
    tell("Model loaded on this iPad. Generate a test explanation now, then switch to airplane mode, fully close and reopen the app, and repeat Search to verify offline use.");
    if($("modelExplain"))$("modelExplain").disabled=false;
    return engine;
@@ -71,8 +77,12 @@ function getEvidence(){
 }
 async function explain(){
  if(typeof mode!=="undefined"&&mode!=="learn"){tell("Switch to Learn for generated explanations; Rapid is non-generative.");return}
- if(!engine){tell("Download and load the local model first.");return}
+ if(window.SILEFIND?.refreshEvidence)window.SILEFIND.refreshEvidence();
  const {query,docs}=getEvidence();
+ if(!engine){
+   tell("Loading your selected local Search model. If this is the first time, the model must be downloaded while connected to Wi-Fi.");
+   try{await load()}catch(err){tell("Local model unavailable: "+String(err.message||err));return}
+ }
  if(!query){tell("Enter a revision question first.");return}
  if(!docs.length){tell("First run local Search to retrieve evidence; no passage available.");return}
  const out=$("modelAnswer"),b=$("modelExplain");if(!out)return;
@@ -85,6 +95,9 @@ async function explain(){
  const result=await engine.chat.completions.create({messages,temperature:0.15,top_p:0.85,max_tokens:700});
  const answer=result.choices?.[0]?.message?.content;
  if(typeof answer!=="string"||!answer)throw Error("No local model output");
+ const cited=[...answer.matchAll(/\[(\d+)\]/g)].map(m=>Number(m[1]));
+ const invalid=cited.filter(n=>n<1||n>docs.length);
+ if(invalid.length)throw Error("Model produced references outside the retrieved source list; result withheld.");
  out.innerHTML='<div class="readSection"><div class="eyebrow">Unverified local explanation • Revision only</div><p class="modelText">'+esc(answer)+'</p></div>'+
  '<p class="readerMeta">Generated text may contain mistakes. Check every rule and source against the original materials. No cloud inference was used.</p>';
  tell("Local explanation generated. Offline relaunch must still be tested independently.");
