@@ -28,6 +28,11 @@ jobs:
           node tests/worker-offline.test.js
           node tests/import-validation.test.js
           node tests/practice-persistence.test.js
+      - name: Run real headless Chrome smoke with synthetic dataset
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          command -v google-chrome
+          CHROME_BIN="$(command -v google-chrome)" node tests/browser-smoke.test.js
       - name: Package public application shell for browser verification
         uses: actions/upload-artifact@v4
         with:
