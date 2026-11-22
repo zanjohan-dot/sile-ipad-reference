@@ -75,7 +75,7 @@ async function run(){
  await step("All related questions and opening Rapid reference",async()=>{
   await page.locator("#showAllRelated").click();
   check(await page.locator('[data-question-index]').count()>12,"Show all related questions failed");
-  await page.locator('[data-question-index]').first.click();
+  await page.locator('[data-question-index]').first().click();
   await page.locator(".reader").waitFor();
   check((await page.locator(".reader").innerText()).includes("Recorded answer choices"),"Rapid question not opened");
   await page.locator("#backBtn").click();
@@ -86,8 +86,8 @@ async function run(){
   await page.locator("#searchBtn").click();
   await page.locator("#findQuery").fill("fiduciary duties");
   await page.locator("#findNow").click();
-  await page.locator('[data-question-index]').first.click();
-  await page.locator('input[name="practiceChoice"]').first.check();
+  await page.locator('[data-question-index]').first().click();
+  await page.locator('input[name="practiceChoice"]').first().check();
   await page.locator("#submitPractice").click();
   await page.waitForFunction(()=>document.getElementById("practiceFeedback")?.textContent.includes("saved locally"),null,{timeout:10000});
   await page.locator("#toggleQuestionReview").click();
