@@ -276,3 +276,37 @@ body.focusMode .mainArea{min-width:0}
  .learningStage{grid-template-columns:33px minmax(0,1fr);gap:8px}
  .stageNum{width:30px;height:30px}
 }
+
+/* Clear distinction between Rapid lookup and Learn study workflows */
+.rapidHome,.learnHome{max-width:930px;margin:0 auto}
+.rapidHome .pageTitle,.learnHome .pageTitle{font-size:clamp(1.65rem,3vw,2.25rem)}
+.rapidHome .subjectCard{min-height:105px}
+.learnHome .subjectCard{min-height:145px}
+.quickFind{min-width:200px;margin:17px 0 5px}
+.modeIntro{border-radius:15px;padding:20px 22px;margin-bottom:20px}
+.modeIntro h2{font-size:1.38rem;line-height:1.35;margin:2px 0 8px}
+.modeIntro p{max-width:75ch;margin:0 0 13px;color:#495966}
+.quickMode{background:#eaf2f6;border:1px solid #c9dce8}
+.learnMode{background:#fffdf8;border:1px solid #d7d9d7}
+.studyProgressTop{padding:13px 15px;background:#e7f0e9;border-radius:11px;margin:16px 0;color:#244d35}
+.studyProgressTop strong{font-size:1.08rem}
+.progressTrack{height:9px;background:#cddbcf;overflow:hidden;border-radius:99px;margin:8px 0 0}
+.progressTrack span{display:block;height:100%;background:#32724c;border-radius:99px}
+.reviewCount{display:block;font-size:.84rem;margin-top:8px;color:#8b5326}
+.subjectNext{color:#174b70;font-weight:780;font-size:.84rem;margin-top:13px}
+.nextLesson{padding:18px;background:#f3f7f8;border:1px solid #cddfe8;border-radius:13px;margin-top:14px}
+.nextLesson h3{margin:0 0 8px;font-size:1.08rem}
+.nextLesson p{margin:0 0 12px;color:#53636f}
+.learningShortcuts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0}
+.learnShortcut{display:block;background:#fff;border:1px solid var(--line);padding:14px;border-radius:11px;text-align:left;min-height:90px;color:#174b70}
+.learnShortcut strong,.learnShortcut small{display:block}
+.learnShortcut small{margin-top:7px;color:#5b6972;font-size:.79rem}
+.referenceFilters{display:flex;gap:7px;flex-wrap:wrap;margin:15px 0 20px}
+.referenceFilters button{min-height:43px;border:1px solid #bccbd5;background:#fff;border-radius:999px;color:#194d70;padding:0 12px;font-weight:750}
+.referenceFilters button.active{background:#164f78;border-color:#164f78;color:#fff}
+.modelText{white-space:pre-wrap;overflow-wrap:anywhere}
+.sourceMeta{font-size:.74rem;color:#5d6c74;line-height:1.4;margin-top:8px}
+.localSearchSetup{margin:22px auto 0}
+.localSearchSetup details[open]{background:#fff}
+@media(max-width:900px){.learningShortcuts{grid-template-columns:1fr}.modeIntro{padding:16px}}
+@media(max-width:630px){.modeIntro h2{font-size:1.22rem}.quickFind{width:100%}.rapidHome .pageTitle,.learnHome .pageTitle{font-size:1.55rem}}
