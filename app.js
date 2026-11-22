@@ -451,9 +451,11 @@ async function init(){
     updateContext();
     if(DATA) renderPaperDashboard(); else renderSetup();
     window.SILE_APP_READY = true;
+    try { sessionStorage.removeItem('sile_last_startup_error'); } catch (_) {}
   } catch (err) {
     console.error('SILE app startup', err);
     window.SILE_APP_ERROR = String(err && err.message || err);
+    try { sessionStorage.setItem('sile_last_startup_error',window.SILE_APP_ERROR); } catch (_) {}
     const msg = esc(window.SILE_APP_ERROR);
     setScreen('<div class="dataPanel"><div class="eyebrow">Startup diagnostic</div><h1 class="pageTitle">Unable to start the study interface</h1>' +
       '<p>The local study data and progress have not been deleted. Error: <strong>' + msg + '</strong></p>' +
