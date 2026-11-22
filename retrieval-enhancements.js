@@ -38,24 +38,85 @@ function evidence(){
  }
  return out.sort((a,b)=>b.score-a.score);
 }
+function sourceLabel(it){
+ const o=it?.obj||{};
+ return o.source||o.authority||o.course_material||o.example?.source||"Exact source not recorded; consult original materials";
+}
+function sourceExtract(it){
+ if(!it)return '<div class="dataNote">No suitable source explanation was found. Related questions, if any, are listed below. The app has not inferred an answer.</div>';
+ const x=it.obj||{},bits=[];
+ function part(label,value){
+  if(typeof value!=="string"||!value.trim())return;
+  bits.push('<p><strong>'+E(label)+':</strong> '+E(value).slice(0,1200)+'</p>');
+ }
+ if(it.type==="RULE"){
+  part("Recorded rule",x.rule);part("When it applies",x.when);
+  part("Exceptions",x.exception);part("Deadline",x.deadline);
+ }else if(it.type==="DEADLINE"){
+  part("Action",x.action);part("Recorded deadline",x.deadline);
+  part("Starting point",x.start);part("Exception",x.exception);part("Consequence",x.consequence);
+ }else if(it.type==="LESSON"){
+  part("Plain-English explanation",x.big_picture);part("Basic rule",x.basic_rule);
+  part("Exam application",x.exam_application);
+ }else if(it.type==="PROCEDURE"){
+  for(const [i,st] of (Array.isArray(x.steps)?x.steps:[]).slice(0,5).entries()){
+   part("Step "+(i+1),st.step);part("Deadline for step "+(i+1),st.deadline);
+  }
+ }else if(it.type==="TRAP"){part("Exam trap",x.trap);part("Recorded rule",x.rule)}
+ return '<section class="readSection"><div class="eyebrow">Source-based extract — NOT generative AI</div>'+
+  '<h2>Relevant explanation from your local materials</h2><p class="readerMeta">'+E(it.subject)+' · '+E(it.title)+'</p>'+
+  (bits.join("")||'<p>No directly extractable rule is recorded. Open the matching material to review it.</p>')+
+  '<p class="sourceMeta"><strong>Recorded source:</strong> '+E(sourceLabel(it))+'</p>'+
+  '<p class="dataNote">This is a source excerpt, not a conclusion on your facts. Verify exceptions, the underlying authority and the latest audited answer status. The imported November 8 dataset has not been cleared for final release.</p></section>';
+}
 function show(){
  const box=document.getElementById("findResults");if(!box)return;
- lastMatches=evidence();
- if(!lastText.trim()){box.innerHTML='<div class="emptyHint">Enter key facts, a legal term, or a statutory reference to find verified material.</div>';return}
- if(!lastMatches.length){box.innerHTML='<div class="emptyHint">No local references matched. Try fewer terms, or disable the subject-only filter. No answer has been inferred.</div>';return}
- const hits=lastMatches.slice(0,12);
- let tools="";
- if(window.SILETOOLS?.ready&&window.CALCS){
-  const a=window.CALCS.filter(c=>{
-   if(!lastAll&&DATA.subjects.find(s=>s.code===c.code)?.paper!==paper)return false;
-   if(lastSubjectScope&&subject&&c.code!==subject)return false;
-   try{return c.detect&&new RegExp(c.detect,"i").test(lastText)}catch(e){return false}
-  }).slice(0,5);
-  if(a.length)tools='<h2 class="sectionTitle">Matching calculators</h2><div class="toolLaunchGrid">'+a.map(c=>'<button class="toolLaunch" data-find-calc="'+E(c.id)+'"><strong>'+E(c.title)+'</strong><small>'+E(c.what).slice(0,180)+'</small></button>').join("")+'</div>';
+ if(!lastText.trim()){
+  lastMatches=[];box.innerHTML='<div class="emptyHint">Enter a legal issue, statutory provision or a question in everyday English.</div>';return;
  }
- box.innerHTML='<div class="listHeader"><div><div class="eyebrow">Ranked references · '+E(DATA.meta?.built||"imported dataset")+'</div><h2>Relevant references</h2></div><div class="listCount">'+lastMatches.length+' matches</div></div><div class="contentList">'+hits.map((x,i)=>'<button class="contentRow" data-find-index="'+i+'"><div class="rowTop"><span class="rowType">'+E(x.type)+'</span><span class="rowMeta">'+E(x.subject)+'</span></div><div class="rowTitle">'+E(x.title)+'</div><div class="rowExcerpt">'+E(x.text).slice(0,245)+'</div><div class="readerMeta">Matched terms: '+E(x.matched.join(" · "))+' · Retrieval score is not legal confidence</div><div class="sourceMeta">Source: '+E(x.obj?.source||x.obj?.authority||x.obj?.course_material||x.obj?.example?.source||"Check original material — exact citation not stored")+'</div></button>').join("")+'</div>'+tools+'<div class="dataNote">Similar wording does not mean identical facts or the same answer. Verify each qualification, legal threshold and source. This feature does not generate answers.</div>';
- document.querySelectorAll("[data-find-index]").forEach(el=>el.onclick=()=>open(hits[Number(el.dataset.findIndex)]));
- document.querySelectorAll("[data-find-calc]").forEach(el=>el.onclick=()=>window.SILETOOLS.openCalc(el.dataset.findCalc));
+ const scored=evidence();
+ const sources=scored.filter(it=>it.type!=="QUESTION").slice(0,12);
+ const questions=scored.filter(it=>it.type==="QUESTION").slice(0,12);
+ // Related questions may use different words from the rule. Resolve them using
+ // the explicit subject/topic mapping in the imported verified JSON.
+ const related=new Set(sources.slice(0,6).map(it=>it.code+":"+(it.obj?.topic||it.topicId||"")));
+ const used=new Set(questions.map(it=>it.obj?.id));
+ for(const it of flat){
+  if(questions.length>=12)break;
+  if(it.type!=="QUESTION"||used.has(it.obj?.id))continue;
+  if(!lastAll&&it.paper!==paper)continue;
+  if(lastSubjectScope&&subject&&it.code!==subject)continue;
+  if(!it.obj?.topic||!related.has(it.code+":"+it.obj.topic))continue;
+  questions.push({...it,score:0,matched:[],topicLinked:true});
+  used.add(it.obj.id);
+ }
+ lastMatches=[...sources,...questions];
+ if(!sources.length&&!questions.length){
+  box.innerHTML='<div class="emptyHint">No relevant local record was found. Try shorter terms, another subject or a statute number. No answer has been invented.</div>';return;
+ }
+ const best=sources.find(it=>["RULE","DEADLINE","LESSON","PROCEDURE","TRAP"].includes(it.type));
+ const sourceRows=sources.map((it,i)=>'<button type="button" class="contentRow" data-source-index="'+i+'">'+
+   '<div class="rowTop"><span class="rowType">'+E(it.type)+'</span><span class="rowMeta">'+E(it.subject)+'</span></div>'+
+   '<div class="rowTitle">'+E(it.title)+'</div><div class="rowExcerpt">'+E(it.text).slice(0,260)+'</div>'+
+   '<div class="sourceMeta">Recorded source: '+E(sourceLabel(it))+'</div></button>').join("");
+ const qRows=questions.map((it,i)=>{
+   const st=String(it.obj?.answer_status||"").toUpperCase();
+   const label=st==="OFFICIAL"?"OFFICIAL key, verify audit":st==="DERIVED"?"DERIVED, not official":
+      st==="UNRESOLVED"?"UNRESOLVED, not scored":st==="EXCLUDED"?"EXCLUDED, not scored":"Status uncertain, not scored";
+   return '<button type="button" class="contentRow" data-question-index="'+i+'">'+
+    '<div class="rowTop"><span class="rowType">QUESTION · '+E(it.obj?.id||it.title)+'</span><span class="rowMeta">'+E(it.subject)+'</span></div>'+
+    '<div class="rowTitle">'+E(it.obj?.stem||it.title).slice(0,220)+'</div>'+
+    '<div class="readerMeta">'+E(label)+(it.topicLinked?" · Related by topic":" · Matches your terms")+'</div></button>';
+ }).join("");
+ const qSection='<section class="readSection"><h2>Related examination questions ('+questions.length+')</h2>'+
+   (qRows||'<p>No matching examination question was found. Check the subject or alter the query.</p>')+'</section>';
+ const srcSection='<section class="readSection"><h2>Supporting source records ('+sources.length+')</h2>'+
+   (sourceRows||'<p>No source record was retrieved for this query.</p>')+'</section>';
+ const questionIntent=/\b(question|questions|exam|practice|mcq|option|options)\b/i.test(lastText);
+ box.innerHTML=sourceExtract(best)+(questionIntent?qSection+srcSection:srcSection+qSection)+
+ '<p class="dataNote">Source retrieval is not AI reasoning. A matching phrase is not proof that a rule applies. No answers have been generated or graded by this search.</p>';
+ box.querySelectorAll("[data-source-index]").forEach(b=>b.onclick=()=>open(sources[Number(b.dataset.sourceIndex)]));
+ box.querySelectorAll("[data-question-index]").forEach(b=>b.onclick=()=>open(questions[Number(b.dataset.questionIndex)]));
 }
 function render(preserve=false){
  if(!DATA)return;
