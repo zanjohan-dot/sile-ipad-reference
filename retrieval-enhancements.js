@@ -1,0 +1,84 @@
+/* Local evidence retrieval. No network calls, generated answers, or persistent question storage. */
+(function(){
+"use strict";
+const STOP=new Set("the a an and or but on at in is are was were this that which what with from by to for as of it if can may should would then when where how why have has had be been into does do you your their they we such not only under section act rule company singapore person persons more less question correct following statement statements".split(" "));
+const E=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const tokens=s=>String(s||"").toLowerCase().match(/[a-z0-9]+(?:\.[0-9]+)?/g)?.filter(w=>w.length>1&&!STOP.has(w))||[];
+let lastText="",lastMatches=[],lastSubjectScope=true,lastAll=false;
+function open(it){
+ subject=it.code;renderSubjects();updateContext();
+ if(it.type==="RULE")openRule(it.obj);
+ else if(it.type==="DEADLINE")openDeadline(it.obj);
+ else if(it.type==="TRAP")openTrap(it.obj);
+ else if(it.type==="PROCEDURE")openProcedure(it.obj);
+ else if(it.type==="QUESTION"&&mode==="learn")openQuestion(it.obj);
+ const back=document.getElementById("backBtn");if(back)back.onclick=()=>render(true);
+}
+function evidence(){
+ if(!DATA)return [];
+ const all=flat.filter(x=>(lastAll||x.paper===paper)&&(!lastSubjectScope||!subject||x.code===subject));
+ const qq=new Set(tokens(lastText));if(!qq.size)return [];
+ const docs=all.map(it=>({it,ti:new Set(tokens(it.title)),tx:new Set(tokens(it.text).slice(0,320))}));
+ const df=new Map();for(const x of docs)for(const t of new Set([...x.ti,...x.tx]))df.set(t,(df.get(t)||0)+1);
+ const n=docs.length,out=[];
+ for(const x of docs){
+  if(x.it.type==="QUESTION"&&mode!=="learn")continue;
+  let score=0,matched=[];
+  for(const t of qq){if(!x.ti.has(t)&&!x.tx.has(t))continue;const idf=Math.log(1+(n+1)/(1+(df.get(t)||0)));score+=(x.ti.has(t)?6:2)*idf;matched.push(t)}
+  if(!matched.length)continue;
+  if(x.it.type==="RULE")score*=1.3;
+  if(["DEADLINE","PROCEDURE"].includes(x.it.type))score*=1.12;
+  if(String(x.it.title).toLowerCase().includes(lastText.toLowerCase()))score+=6;
+  score*=1+.06*Math.max(0,matched.length-1);
+  out.push({...x.it,score,matched});
+ }
+ return out.sort((a,b)=>b.score-a.score).slice(0,40);
+}
+function show(){
+ const box=document.getElementById("findResults");if(!box)return;
+ lastMatches=evidence();
+ if(!lastText.trim()){box.innerHTML='<div class="emptyHint">Enter key facts, a legal term, or a statutory reference to find verified material.</div>';return}
+ if(!lastMatches.length){box.innerHTML='<div class="emptyHint">No local references matched. Try fewer terms, or disable the subject-only filter. No answer has been inferred.</div>';return}
+ const hits=lastMatches.slice(0,12);
+ let tools="";
+ if(window.SILETOOLS?.ready&&window.CALCS){
+  const a=window.CALCS.filter(c=>{
+   if(!lastAll&&DATA.subjects.find(s=>s.code===c.code)?.paper!==paper)return false;
+   if(lastSubjectScope&&subject&&c.code!==subject)return false;
+   try{return c.detect&&new RegExp(c.detect,"i").test(lastText)}catch(e){return false}
+  }).slice(0,5);
+  if(a.length)tools='<h2 class="sectionTitle">Matching calculators</h2><div class="toolLaunchGrid">'+a.map(c=>'<button class="toolLaunch" data-find-calc="'+E(c.id)+'"><strong>'+E(c.title)+'</strong><small>'+E(c.what).slice(0,180)+'</small></button>').join("")+'</div>';
+ }
+ box.innerHTML='<div class="listHeader"><div><div class="eyebrow">Ranked local evidence</div><h2>Relevant references</h2></div><div class="listCount">'+lastMatches.length+' matches</div></div><div class="contentList">'+hits.map((x,i)=>'<button class="contentRow" data-find-index="'+i+'"><div class="rowTop"><span class="rowType">'+E(x.type)+'</span><span class="rowMeta">'+E(x.subject)+'</span></div><div class="rowTitle">'+E(x.title)+'</div><div class="rowExcerpt">'+E(x.text).slice(0,245)+'</div><div class="readerMeta">Matched terms: '+E(x.matched.join(" · "))+' · Retrieval score is not legal confidence</div></button>').join("")+'</div>'+tools+'<div class="dataNote">Similar wording does not mean identical facts or the same answer. Verify each qualification, legal threshold and source. This feature does not generate answers.</div>';
+ document.querySelectorAll("[data-find-index]").forEach(el=>el.onclick=()=>open(hits[Number(el.dataset.findIndex)]));
+ document.querySelectorAll("[data-find-calc]").forEach(el=>el.onclick=()=>window.SILETOOLS.openCalc(el.dataset.findCalc));
+}
+function render(preserve=false){
+ if(!DATA)return;
+ document.body.classList.remove("focusMode");
+ if(!preserve){lastText="";lastAll=false;lastSubjectScope=true}
+ const rev=mode==="learn";
+ setScreen('<div class="findPage"><div class="eyebrow">Local reference finder · '+(rev?"REVISION":"RAPID REFERENCE")+'</div><h1 class="pageTitle">Stuck? Find the relevant rule</h1><p class="pageLead">'+(rev?"For revision, paste practice facts or a question to retrieve relevant material. No answer is generated.":"Search by key terms, facts, or a provision to locate existing reference material. Confirm the examination rules before using this function during a live paper.")+'</p><div class="searchPanel"><label class="findLabel" for="findQuery">Legal issue or key facts</label><textarea id="findQuery" rows="3" placeholder="e.g. 50 people private placement prospectus exemption"></textarea><div class="findControls"><label><input id="findSubjectOnly" type="checkbox" '+(lastSubjectScope?"checked":"")+'> This subject only</label><label><input id="findAllPapers" type="checkbox" '+(lastAll?"checked":"")+'> Include other paper</label><button id="findNow" class="primaryButton">Find references</button></div></div><div id="findResults" class="searchResults"></div></div>');
+ document.getElementById("findQuery").value=lastText;
+ document.getElementById("findQuery").oninput=e=>{lastText=e.target.value};
+ document.getElementById("findNow").onclick=show;
+ document.getElementById("findSubjectOnly").onchange=e=>{lastSubjectScope=e.target.checked;show()};
+ document.getElementById("findAllPapers").onchange=e=>{lastAll=e.target.checked;show()};
+ if(lastText)show();
+}
+async function aiStatus(){
+ document.body.classList.remove("focusMode");
+ setScreen('<div class="dataPanel"><div class="eyebrow">Revision prototype · no model installed</div><h1 class="pageTitle">Offline AI readiness</h1><p>Safari 26 can support WebGPU, but this SILE app does not yet contain an installed or tested on-device language model. Verified calculators and the local reference finder do work without AI.</p><div class="dataActions"><button id="checkGpu" class="primaryButton">Check iPad capability</button><button id="findInstead" class="secondaryButton">Open reference finder</button></div><div id="gpuResult" class="readSection" aria-live="polite">Not checked</div><div class="dataNote">AI answer generation is disabled for examination use. A future revision-only model needs a downloaded model, grounded retrieval, privacy checks and a successful airplane-mode test.</div></div>');
+ document.getElementById("findInstead").onclick=()=>render();
+ document.getElementById("checkGpu").onclick=async()=>{
+  const box=document.getElementById("gpuResult");box.textContent="Checking WebGPU and local storage…";
+  try{
+   const gpu=!!navigator.gpu,adapter=gpu?await navigator.gpu.requestAdapter():null;
+   const store=await(navigator.storage?.estimate?navigator.storage.estimate():Promise.resolve({}));
+   const free=store.quota!=null&&store.usage!=null?((store.quota-store.usage)/1e9).toFixed(2)+" GB estimated free quota":"Unknown";
+   box.innerHTML="<h2>Device capability</h2><p>WebGPU API: "+(gpu?"Available":"Not available")+"<br>GPU adapter: "+(adapter?"Available":"Unavailable")+"<br>Estimated remaining storage quota: "+free+"<br>Local language model: <strong>NOT INSTALLED</strong><br>Offline AI generation: <strong>NOT VERIFIED</strong></p>";
+  }catch(e){box.textContent="Capability test failed: "+String(e)}
+ };
+}
+window.SILEFIND={render,aiStatus,get lastMatches(){return lastMatches}};
+})();
