@@ -1,0 +1,30 @@
+name: SILE non-private regression checks
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [audit/search-reliability-20261123]
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check JavaScript syntax
+        run: |
+          node --check app.js
+          node --check retrieval-enhancements.js
+          node --check local-model.js
+          node --check study-ux.js
+          node --check tools-enhancements.js
+          node --check sw.js
+      - name: Run synthetic regression tests
+        run: |
+          node tests/search-sanity.test.js
+          node tests/worker-offline.test.js
+          node tests/import-validation.test.js
+          node tests/practice-persistence.test.js
