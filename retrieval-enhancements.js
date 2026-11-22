@@ -7,7 +7,7 @@ const ALIASES={directors:"director",duties:"duty",companies:"company",appeals:"a
 const tokens=s=>(String(s||"").toLowerCase().replace(/trade[ -]+marks/g,"trademark").match(/[a-z0-9]+(?:\.[0-9]+)?/g)||[])
  .map(w=>ALIASES[w]||((w.length>4&&w.endsWith("ies"))?w.slice(0,-3)+"y":(w.length>4&&w.endsWith("s")&&!w.endsWith("ss")&&!w.endsWith("us")?w.slice(0,-1):w)))
  .filter(w=>w.length>1&&!STOP.has(w));
-let lastText="",lastMatches=[],lastSubjectScope=false,lastAll=true;
+let lastText="",lastMatches=[],lastSubjectScope=false,lastAll=true,showAllQuestions=false;
 let cachedFlat=null,cachedDocs=[];
 function open(it){
  subject=it.code;paper=it.paper;document.querySelectorAll("[data-paper]").forEach(b=>b.classList.toggle("active",Number(b.dataset.paper)===paper));renderSubjects();updateContext();
@@ -85,13 +85,12 @@ function show(){
  }
  const scored=evidence();
  const sources=scored.filter(it=>it.type!=="QUESTION").slice(0,12);
- const questions=scored.filter(it=>it.type==="QUESTION").slice(0,12);
+ const questions=scored.filter(it=>it.type==="QUESTION");
  // Related questions may use different words from the rule. Resolve them using
  // the explicit subject/topic mapping in the imported verified JSON.
  const related=new Set(sources.slice(0,6).map(it=>it.code+":"+(it.obj?.topic||it.topicId||"")));
  const used=new Set(questions.map(it=>it.obj?.id));
  for(const it of flat){
-  if(questions.length>=12)break;
   if(it.type!=="QUESTION"||used.has(it.obj?.id))continue;
   if(!lastAll&&it.paper!==paper)continue;
   if(lastSubjectScope&&subject&&it.code!==subject)continue;
@@ -112,7 +111,8 @@ function show(){
    '<div class="rowTop"><span class="rowType">'+E(it.type)+'</span><span class="rowMeta">'+E(it.subject)+'</span></div>'+
    '<div class="rowTitle">'+E(it.title)+'</div><div class="rowExcerpt">'+E(it.text).slice(0,260)+'</div>'+
    '<div class="sourceMeta">Recorded source: '+E(sourceLabel(it))+'</div></button>').join("");
- const qRows=questions.map((it,i)=>{
+ const displayedQuestions=showAllQuestions?questions:questions.slice(0,12);
+ const qRows=displayedQuestions.map((it,i)=>{
    const st=String(it.obj?.answer_status||"").toUpperCase();
    const label=st==="OFFICIAL"?"OFFICIAL key, verify audit":st==="DERIVED"?"DERIVED, not official":
       st==="UNRESOLVED"?"UNRESOLVED, not scored":st==="EXCLUDED"?"EXCLUDED, not scored":"Status uncertain, not scored";
@@ -122,24 +122,30 @@ function show(){
     '<div class="readerMeta">'+E(label)+(it.topicLinked?" · Related by topic":" · Matches your terms")+'</div></button>';
  }).join("");
  const qSection='<section class="readSection"><h2>Related examination questions ('+questions.length+')</h2>'+
-   (qRows||'<p>No matching examination question was found. Check the subject or alter the query.</p>')+'</section>';
+   (qRows||'<p>No matching examination question was found. Check the subject or alter the query.</p>')+
+   (!showAllQuestions&&questions.length>12?'<button id="showAllRelated" type="button" class="secondaryButton">Show all '+questions.length+' matched and topic-linked questions</button>':'')+
+   '</section>';
  const srcSection='<section class="readSection"><h2>Supporting source records ('+sources.length+')</h2>'+
    (sourceRows||'<p>No source record was retrieved for this query.</p>')+'</section>';
- box.innerHTML=sourceExtract(best)+(questionIntent?qSection+srcSection:srcSection+qSection)+
+ const ambiguous=best&&sources.some(it=>it.code!==best.code&&it.score>=best.score*.75);
+ box.innerHTML=(ambiguous?'<div class="dataNote"><strong>Multiple legal subjects matched.</strong> The first excerpt may not govern your facts; open the relevant subject and verify the applicable law.</div>':'')+
+  sourceExtract(best)+(questionIntent?qSection+srcSection:srcSection+qSection)+
  '<p class="dataNote">Source retrieval is not AI reasoning. A matching phrase is not proof that a rule applies. No answers have been generated or graded by this search.</p>';
  const openBest=box.querySelector("#openBestSource");
  if(openBest&&best)openBest.onclick=()=>open(best);
  box.querySelectorAll("[data-source-index]").forEach(b=>b.onclick=()=>open(sources[Number(b.dataset.sourceIndex)]));
- box.querySelectorAll("[data-question-index]").forEach(b=>b.onclick=()=>open(questions[Number(b.dataset.questionIndex)]));
+ box.querySelectorAll("[data-question-index]").forEach(b=>b.onclick=()=>open(displayedQuestions[Number(b.dataset.questionIndex)]));
+ const more=box.querySelector("#showAllRelated");
+ if(more)more.onclick=()=>{showAllQuestions=true;show()};
 }
 function render(preserve=false){
  if(!DATA)return;
  document.body.classList.remove("focusMode");
- if(!preserve){lastText="";lastAll=true;lastSubjectScope=false}
+ if(!preserve){lastText="";lastAll=true;lastSubjectScope=false;showAllQuestions=false}
  const rev=mode==="learn";
  setScreen('<div class="findPage"><div class="eyebrow">Local reference finder · '+(rev?"REVISION":"RAPID REFERENCE")+'</div><h1 class="pageTitle">Search</h1><p class="pageLead">'+(rev?"Ask a question in everyday English. Search finds local source material first, then can explain it with the downloaded on-device model — no internet required after successful installation and caching.":"Find recorded source explanations and related examination questions. Source extraction works offline; it is not an AI-generated answer.")+'</p><div class="searchPanel"><label class="findLabel" for="findQuery">Legal issue or key facts</label><textarea id="findQuery" rows="3" placeholder="e.g. 50 people private placement prospectus exemption"></textarea><div class="findControls"><label><input id="findSubjectOnly" type="checkbox" '+(lastSubjectScope?"checked":"")+'> This subject only</label><label><input id="findAllPapers" type="checkbox" '+(lastAll?"checked":"")+'> Search both papers</label><button id="findNow" class="secondaryButton">Find sources and questions</button>'+(rev?'<button id="findExplainNow" class="primaryButton">Find & explain</button>':'')+'</div></div><div id="findResults" class="searchResults"></div>'+(rev?'<div id="modelPanel" class="localSearchSetup"></div>':'')+'</div>');
  document.getElementById("findQuery").value=lastText;
- document.getElementById("findQuery").oninput=e=>{lastText=e.target.value};
+ document.getElementById("findQuery").oninput=e=>{lastText=e.target.value;showAllQuestions=false};
  document.getElementById("findNow").onclick=show;
  if(rev&&document.getElementById("findExplainNow")){
    document.getElementById("findExplainNow").onclick=()=>{
@@ -156,8 +162,8 @@ function render(preserve=false){
      }
    };
  }
- document.getElementById("findSubjectOnly").onchange=e=>{lastSubjectScope=e.target.checked;show()};
- document.getElementById("findAllPapers").onchange=e=>{lastAll=e.target.checked;show()};
+ document.getElementById("findSubjectOnly").onchange=e=>{lastSubjectScope=e.target.checked;showAllQuestions=false;show()};
+ document.getElementById("findAllPapers").onchange=e=>{lastAll=e.target.checked;showAllQuestions=false;show()};
  if(rev&&window.SILELOCALMODEL)window.SILELOCALMODEL.panel();
  if(lastText)show();
 }
