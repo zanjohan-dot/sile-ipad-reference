@@ -40,6 +40,7 @@ jobs:
       - name: Generate synthetic question bank for staging import
         run: node -e "require('fs').writeFileSync('SILE_Synthetic_323_Questions.json',JSON.stringify(require('./tests/synthetic-fixture.js')))"
       - name: Package public application shell for browser verification
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: sile-static-candidate
