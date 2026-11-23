@@ -39,6 +39,7 @@ jobs:
       - name: Run Linux WebKit touchscreen smoke with synthetic dataset
         run: |
           npx playwright install --with-deps webkit
+          node tests/webkit-offline-baseline.test.js
           BROWSER_ENGINE=webkit node tests/browser-smoke.test.js
       - name: Generate synthetic question bank for staging import
         run: node -e "require('fs').writeFileSync('SILE_Synthetic_323_Questions.json',JSON.stringify(require('./tests/synthetic-fixture.js')))"
