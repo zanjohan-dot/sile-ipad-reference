@@ -30,19 +30,27 @@ function questionCount(){return DATA?DATA.subjects.reduce((n,s)=>n+asList(s.ques
 function updateStatus(){$('#statusBtn').textContent=DATA?'Local data · '+questionCount()+' questions':'No local data'}
 function updateContext(){const s=currentSubject();const m=mode==='rapid'?'Rapid':'Learn';$('#contextLabel').textContent=s?'Paper '+paper+' - '+s.subject+' - '+m:'Paper '+paper+' - '+m}
 
+// Local change-detection marker for the answer and question actually attempted.
+// Not a cryptographic signature or an official legal-content verification.
+function questionRevision(q){
+ const canonical=JSON.stringify([q.id,q.stem,q.options,q.answer_status,q.answer,q.answer_basis]);
+ let h=2166136261;
+ for(let i=0;i<canonical.length;i++)h=Math.imul(h^canonical.charCodeAt(i),16777619);
+ return "local-v1-"+(h>>>0).toString(16);
+}
 function flatten(){
  flat=[];
  DATA.subjects.forEach(s=>{
   const base={paper:s.paper,code:s.code,subject:s.subject};
   const str=v=>Array.isArray(v)?v.join(" "):typeof v==="string"?v:"";
   asList(s.rules).forEach(x=>flat.push({...base,type:"RULE",title:x.title||x.id||"Rule",
-   text:[x.rule,x.when,x.triggers,x.exception,x.deadline,x.procedure,x.trap,x.source,x.detail].map(str).join(" "),obj:x}));
+   text:[x.topic,topicMeta(s,x.topic)?.name,x.rule,x.when,x.triggers,x.exception,x.deadline,x.procedure,x.trap,x.source,x.detail].map(str).join(" "),obj:x}));
   asList(s.deadlines).forEach(x=>flat.push({...base,type:"DEADLINE",title:x.action||x.title||"Deadline",
-   text:[x.deadline,x.action,x.start,x.exception,x.consequence,x.source].map(str).join(" "),obj:x}));
+   text:[x.topic,topicMeta(s,x.topic)?.name,x.deadline,x.action,x.start,x.exception,x.consequence,x.source].map(str).join(" "),obj:x}));
   asList(s.procedures).forEach(x=>flat.push({...base,type:"PROCEDURE",title:x.title||"Procedure",
-   text:asList(x.steps).map(st=>[st.step,st.party,st.precondition,st.document,st.deadline,st.consequence,st.source].map(str).join(" ")).join(" "),obj:x}));
+   text:[x.topic,topicMeta(s,x.topic)?.name,asList(x.steps).map(st=>[st.step,st.party,st.precondition,st.document,st.deadline,st.consequence,st.source].map(str).join(" ")).join(" ")].map(str).join(" "),obj:x}));
   asList(s.traps).forEach(x=>flat.push({...base,type:"TRAP",title:x.trap||x.title||"Exam trap",
-   text:[x.attractive,x.rule,x.spot,x.source].map(str).join(" "),obj:x}));
+   text:[x.topic,topicMeta(s,x.topic)?.name,x.attractive,x.rule,x.spot,x.source].map(str).join(" "),obj:x}));
   asList(s.topics).forEach(meta=>{
    const x=s.teach?.topics?.[meta.id]||{};
    flat.push({...base,type:"LESSON",title:meta.name||meta.id||"Lesson",
@@ -50,8 +58,11 @@ function flatten(){
       ...asList(x.core_concepts).map(t=>[t.term,t.plain,t.legal].map(str).join(" "))].map(str).join(" "),
     obj:x,topicId:meta.id});
   });
-  asList(s.questions).forEach(x=>flat.push({...base,type:"QUESTION",title:(x.label||"Question")+(x.qno?" · Q"+x.qno:""),
-   text:[x.stem,Object.values(x.options||{}).join(" "),x.explanation,x.tested_rule,x.trap,x.authority,x.course_material].map(str).join(" "),obj:x}));
+  asList(s.questions).forEach(x=>flat.push({...base,type:"QUESTION",title:(x.id||"Question")+" · "+(x.label||"Question")+(x.qno?" · Q"+x.qno:""),
+   text:[x.topic,topicMeta(s,x.topic)?.name,x.subtopic,x.stem,Object.values(x.options||{}).join(" "),
+     Object.values(x.option_expl||{}).join(" "),x.explanation,x.official_explanation,x.tested_rule,
+     x.really_testing,x.answer_basis,x.key_clue,x.fastest_route,x.trap,x.common_mistake,
+     x.authority,x.course_material,x.cs_guidance,x.notes,x.keywords].map(str).join(" "),obj:x}));
  });
 }
 
@@ -210,6 +221,8 @@ function provenanceBadges(q){
   if(status==='OFFICIAL')out+='<span class="badge official">OFFICIAL SILE ANSWER</span>';
   else if(status==='DERIVED')out+='<span class="badge derived">DERIVED - NOT OFFICIAL</span>';
   else if(status.includes('UNRESOLVED'))out+='<span class="badge unresolved">UNRESOLVED - NOT SCORED</span>';
+  else if(status==='EXCLUDED')out+='<span class="badge unresolved">EXCLUDED - NOT SCORED</span>';
+  else if(status!=='DERIVED')out+='<span class="badge unresolved">STATUS UNVERIFIED - NOT SCORED</span>';
   if(String(q.answer_basis||'').includes('SOURCE CONFLICT')||String(q.notes||'').includes('SOURCE CONFLICT'))out+='<span class="badge conflict">SOURCE CONFLICT</span>';
   if(q.confidence)out+='<span class="badge neutral">Confidence: '+esc(q.confidence)+'</span>';
   return out;
@@ -251,7 +264,7 @@ function section(title,content,cls){if(content==null||content===''||(Array.isArr
 function renderRapidQuestion(q){
  const status=String(q.answer_status||"").toUpperCase();
  const incomplete=Object.keys(q.options||{}).length!==4;
- const answer=status.includes("UNRESOLVED")?"No settled answer — not scored":(q.answer||"No answer verified");
+ const answer=status==="OFFICIAL"||status==="DERIVED"?(q.answer||"No answer verified"):"No settled answer — not scored";
  const opts=Object.entries(q.options||{}).map(([k,v])=>'<div class="optionBox"><strong>'+esc(k)+'.</strong> '+esc(v)+'</div>').join("");
  enterFocus();
  setScreen('<div class="reader">'+focusHeader()+
@@ -278,7 +291,7 @@ function openQuestion(q){
  const perOption=Object.entries(q.option_expl||{}).map(([k,v])=>
   '<div class="conceptCard"><div class="conceptTerm">Option '+esc(k)+'</div><div class="conceptPlain">'+esc(v)+'</div></div>').join("");
  const status=String(q.answer_status||"").toUpperCase();
- const safeAnswer=status.includes("UNRESOLVED")?"No settled answer — not scored":(q.answer||"No settled answer");
+ const safeAnswer=status==="OFFICIAL"||status==="DERIVED"?(q.answer||"No settled answer"):"No settled answer — not scored";
  const incompleteOptions=Object.keys(q.options||{}).length!==4;
  const answer='<div id="answerBlock" class="hiddenAnswer">'+
  section("Answer",safeAnswer,"answer")+
@@ -291,37 +304,76 @@ function openQuestion(q){
  section("Course material",q.course_material)+section("Contact Session guidance",q.cs_guidance)+section("Legal authority",q.authority)+
  '</div>';
  const attempt=studyProgress.questions[q.id];
+ const scoreUnverified=!!(attempt?.attempts && attempt.questionRevision!==questionRevision(q));
  setScreen('<div class="reader">'+focusHeader()+
   '<div class="readerMeta">Revision practice · '+esc(q.sitting||q.category||"Question")+'</div>'+
   '<h1 class="pageTitle">'+esc((q.label||"Question")+(q.qno?" · Q"+q.qno:""))+'</h1>'+
   '<div class="provenanceStrip">'+provenanceBadges(q)+'</div>'+
   '<div class="dataNote">'+(incompleteOptions?'Source verification needed: answer options may be incomplete and this attempt will not count as official-key accuracy.':'Practice using source questions only; the recorded answer may require later reconciliation.')+'</div>'+
   section("Question",q.stem,"rule")+
+  (scoreUnverified?'<div class="dataNote"><strong>Earlier attempt history retained.</strong> Previous official-key scores cannot be verified against this answer version. Reattempt the question to establish a current score.</div>':'')+
   '<section class="readSection"><h2>Choose your answer</h2>'+window.SILEUX.questionAttemptUI(q,attempt)+'</section>'+
+  '<div class="studyActions"><button type="button" id="toggleQuestionReview" class="secondaryButton" aria-pressed="'+(attempt?.needsReview?'true':'false')+'">'+
+  (attempt?.needsReview?'Remove from revision list':'Mark this question for revision')+'</button><span id="questionReviewStatus" class="readerMeta" role="status"></span></div>'+
   answer+'</div>');
  bindBack();
- const reveal=(selected,record)=>{
+ const reveal=async(selected,record)=>{
+  const submit=$('#submitPractice');
   if(record&&selected){
+   if(submit)submit.disabled=true;
    const old=studyProgress.questions[q.id]||{attempts:0,officialCorrect:0};
+   const revision=questionRevision(q),sameVersion=old.questionRevision===revision;
    const official=status==="OFFICIAL"&&Object.keys(q.options||{}).length===4;
-   studyProgress.questions[q.id]={
-     attempts:old.attempts+1,officialCorrect:old.officialCorrect+(official&&selected===q.answer?1:0),
-     lastSelected:selected,lastStatus:status,lastAttempt:new Date().toISOString()
+   // Preserve prior score totals when the recorded question or key changes.
+   const priorScoreVersions=Array.isArray(old.priorScoreVersions)?old.priorScoreVersions.slice():[];
+   if(!sameVersion&&Number(old.attempts||0)>0){
+    priorScoreVersions.push({questionRevision:old.questionRevision||"legacy-unversioned",
+     attempts:Number(old.attempts||0),officialCorrect:Number(old.officialCorrect||0),
+     officialAttempts:Number(old.officialAttempts||0),lastAttempt:old.lastAttempt||null,
+     lastStatus:old.lastStatus||null});
+   }
+   const updated={
+    ...old,priorScoreVersions,attempts:Number(old.attempts||0)+1,
+    officialCorrect:(sameVersion?Number(old.officialCorrect||0):0)+(official&&selected===q.answer?1:0),
+    officialAttempts:(sameVersion?Number(old.officialAttempts||0):0)+(official?1:0),
+    lastSelected:selected,lastStatus:status,lastAttempt:new Date().toISOString(),questionRevision:revision
    };
-   dbPut('study_progress_v1',studyProgress).catch(err=>console.error("Progress save failed",err));
+   const proposed={...studyProgress,questions:{...studyProgress.questions,[q.id]:updated}};
+   try{await dbPut('study_progress_v1',proposed);studyProgress=proposed}
+   catch(err){
+    console.error("Progress save failed",err);
+    const feedback=$('#practiceFeedback');
+    if(feedback)feedback.textContent="Attempt NOT SAVED. Please check local storage and try again. Your answer has not been graded.";
+    if(submit)submit.disabled=false;
+    return;
+   }
   }
   const message=window.SILEUX.interpretation(q,selected);
   const feedback=$('#practiceFeedback');
-  if(feedback)feedback.innerHTML='<div class="dataNote">'+esc(message)+'</div>';
+  if(feedback)feedback.textContent=(record?"Attempt saved locally. ":"")+message;
   $('#answerBlock').classList.add("revealed");
   $('#answerBlock').scrollIntoView({block:"nearest"});
  };
- $('#submitPractice').onclick=()=>{
+ $('#submitPractice').onclick=async()=>{
    const selected=document.querySelector('input[name="practiceChoice"]:checked');
    if(!selected){const feedback=$('#practiceFeedback');if(feedback)feedback.textContent="Choose an answer first, or reveal without recording.";return;}
-   reveal(selected.value,true);$('#submitPractice').disabled=true;
+   await reveal(selected.value,true);
  };
- $('#revealWithoutAttempt').onclick=()=>reveal("",false);
+ $('#revealWithoutAttempt').onclick=async()=>{await reveal("",false)};
+ $('#toggleQuestionReview').onclick=async()=>{
+   const button=$('#toggleQuestionReview'),statusBox=$('#questionReviewStatus');
+   button.disabled=true;
+   const old=studyProgress.questions[q.id]||{};
+   const next={...old,needsReview:!old.needsReview,reviewUpdated:new Date().toISOString()};
+   const updated={...studyProgress,questions:{...studyProgress.questions,[q.id]:next}};
+   try{
+    await dbPut('study_progress_v1',updated);studyProgress=updated;
+    button.textContent=next.needsReview?"Remove from revision list":"Mark this question for revision";
+    button.setAttribute("aria-pressed",String(next.needsReview));
+    statusBox.textContent=next.needsReview?"Saved to revision list.":"Removed from revision list.";
+   }catch(err){console.error(err);statusBox.textContent="Could not save revision flag. No change was recorded."}
+   finally{button.disabled=false}
+ };
 }
 function openRule(r){enterFocus();setScreen('<div class="reader">'+focusHeader()+'<div class="readerMeta">Rule - '+esc(r.topic||'')+'</div><h1 class="pageTitle">'+esc(r.title||r.id||'Rule')+'</h1>'+section('Core rule',r.rule,'rule')+section('When it applies',r.when,'')+section('Triggers',r.triggers,'')+section('Exception',r.exception,'')+section('Deadline',r.deadline,'')+section('Procedure',r.procedure,'')+section('Exam trap',r.trap,'trap')+section('Source',r.source,'')+section('Verification note',r.verify,'warning')+section('Detail',r.detail,'')+'</div>');bindBack()}
 function openDeadline(d){enterFocus();setScreen('<div class="reader">'+focusHeader()+'<div class="readerMeta">Deadline - '+esc(d.topic||'')+'</div><h1 class="pageTitle">'+esc(d.action||d.title||'Deadline')+'</h1>'+section('Deadline',d.deadline,'rule')+section('Starts from',d.start,'')+section('Exception',d.exception,'')+section('Consequence',d.consequence,'trap')+section('Source',d.source,'')+'</div>');bindBack()}
@@ -375,8 +427,8 @@ function renderData(){
  setScreen('<div class="dataPanel"><div class="eyebrow">Offline data</div><h1 class="pageTitle">Local content and revision progress</h1>'+
  '<p><strong>'+questionCount()+' questions</strong> are stored locally in IndexedDB on this iPad. No dataset or progress is sent to GitHub.</p>'+
  '<div class="paperStats"><div class="statPill"><strong>'+known+'</strong>lessons understood</div>'+
- '<div class="statPill"><strong>'+needs+'</strong>topics for revision</div><div class="statPill"><strong>'+questions.length+'</strong>questions attempted</div></div>'+
- '<div class="dataActions"><button id="replaceData" class="primaryButton">Replace verified JSON</button>'+
+ '<div class="statPill"><strong>'+needs+'</strong>topics for revision</div><div class="statPill"><strong>'+questions.filter(x=>Number(x.attempts||0)>0).length+'</strong>questions attempted</div></div>'+
+ '<div class="dataActions"><button id="replaceData" class="primaryButton">Replace local dataset (backup first)</button>'+
  '<button id="backupData" class="secondaryButton">Export dataset backup</button>'+
  '<button id="exportProgress" class="secondaryButton">Export revision progress</button></div>'+
  '<label class="calcField"><span>Restore revision progress from backup</span><input id="progressImport" type="file" accept=".json,application/json"></label>'+
@@ -399,14 +451,21 @@ function renderProgress(){
   const all=asList(s.topics),understood=all.filter(t=>topics[t.id]?.state==="understood").length,
     weak=all.filter(t=>topics[t.id]?.state==="needs-review").length;
   const attempts=asList(s.questions).filter(q=>questions[q.id]);
-  const official=asList(s.questions).filter(q=>q.answer_status==="OFFICIAL"&&questions[q.id]);
-  const scored=official.reduce((n,q)=>n+(questions[q.id]?.officialCorrect||0),0);
-  const officialAttempts=official.reduce((n,q)=>n+(questions[q.id]?.attempts||0),0);
-  return '<section class="readSection"><h2>'+esc(s.subject)+'</h2><p>'+understood+'/'+all.length+' lessons understood; '+weak+' need revision. '+attempts.length+' questions attempted.'+
-   (officialAttempts?' Official-answer attempts: '+scored+'/'+officialAttempts+' matching the key.':"")+'</p></section>';
+  const official=asList(s.questions).filter(q=>q.answer_status==="OFFICIAL" &&
+    questions[q.id]?.questionRevision===questionRevision(q) &&
+    Object.keys(q.options||{}).length===4);
+  const scored=official.reduce((n,q)=>n+Number(questions[q.id]?.officialCorrect||0),0);
+  const officialAttempts=official.reduce((n,q)=>n+Number(questions[q.id]?.officialAttempts||0),0);
+  const flagged=asList(s.questions).filter(q=>questions[q.id]?.needsReview).length;
+  const unverified=asList(s.questions).filter(q=>questions[q.id]?.attempts && questions[q.id]?.questionRevision!==questionRevision(q)).length;
+  const historical=asList(s.questions).filter(q=>(questions[q.id]?.priorScoreVersions||[]).length>0).length;
+  return '<section class="readSection"><h2>'+esc(s.subject)+'</h2><p>'+understood+'/'+all.length+' lessons understood; '+weak+' topics need revision; '+attempts.filter(q=>questions[q.id]?.attempts).length+' questions attempted; '+flagged+' questions marked for revision.'+
+   (officialAttempts?' Version-matched official-key attempts: '+scored+'/'+officialAttempts+'.':"")+
+   (unverified?' Earlier score history retained but unverified: '+unverified+' questions.':"")+
+   (historical?' Archived scores from older answer versions: '+historical+' questions.':"")+'</p></section>';
  }).join("");
  setScreen('<div class="eyebrow">Revision progress · Paper '+paper+'</div><h1 class="pageTitle">What I understand and what to revise</h1>'+
- '<p class="pageLead">Only questions with official SILE answers contribute to scored accuracy. Derived-answer comparisons and unresolved questions are not counted as officially correct or incorrect.</p>'+
+ '<p class="pageLead">Scores include only attempts against an unchanged recorded official key and complete choices. Historical attempts without a matching answer version remain saved but unscored. The older legal-content dataset remains under NO-GO review.</p>'+
  summaries+'<div class="dataActions"><button class="secondaryButton" id="exportProgressPage">Export progress</button></div>');
  $('#exportProgressPage').onclick=exportStudyProgress;
 }
@@ -414,9 +473,44 @@ function exportStudyProgress(){
  const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(studyProgress,null,2)],{type:"application/json"}));
  a.href=url;a.download="SILE_Revision_Progress_2026.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1500);
 }
-function renderSetup(){setScreen('<div class="dataPanel"><div class="eyebrow">Setup</div><h1 class="pageTitle">Import verified SILE data</h1><p>Import the verified JSON once. The dataset is then stored locally on this iPad.</p><div class="dataActions"><button id="importNow" class="primaryButton">Choose JSON file</button></div></div>');$('#importNow').onclick=()=>$('#fileInput').click()}
+function renderSetup(){setScreen('<div class="dataPanel"><div class="eyebrow">Setup</div><h1 class="pageTitle">Import structured SILE study data</h1><p>Import structured JSON from your private source once. The dataset is then stored locally on this iPad.</p><div class="dataActions"><button id="importNow" class="primaryButton">Choose JSON file</button></div></div>');$('#importNow').onclick=()=>$('#fileInput').click()}
 
-async function importFile(file){const o=JSON.parse(await file.text());if(!Array.isArray(o.subjects)||o.subjects.length!==8)throw new Error('Expected 8-subject SILE dataset');const q=o.subjects.reduce((n,s)=>n+asList(s.questions).length,0);if(q!==323)throw new Error('Expected 323 questions, found '+q);await dbPut('dataset',o);DATA=o;flatten();subject='';activeTab='overview';updateStatus();renderSubjects();updateContext();renderPaperDashboard();toast('Verified dataset stored locally')}
+function validateImportedDataset(o){
+ if(!o||!Array.isArray(o.subjects)||o.subjects.length!==8)throw new Error("Expected eight subject records");
+ const subjectIds=new Set(),questionIds=new Set();let count=0;
+ for(const s of o.subjects){
+  if(!s||typeof s.code!=="string"||!s.code||subjectIds.has(s.code)||![1,2].includes(s.paper)||
+     typeof s.subject!=="string"||!Array.isArray(s.questions)||!Array.isArray(s.topics)||
+     !Array.isArray(s.rules)||!Array.isArray(s.deadlines)||!Array.isArray(s.procedures)||!Array.isArray(s.traps))
+   throw new Error("Invalid or duplicate subject data");
+  subjectIds.add(s.code);
+  const topics=new Set(s.topics.map(t=>t?.id));
+  for(const q of s.questions){
+   count++;
+   if(!q||typeof q.id!=="string"||!q.id||questionIds.has(q.id)||
+      typeof q.stem!=="string"||!q.stem.trim()||
+      !q.options||typeof q.options!=="object"||Array.isArray(q.options)||
+      Object.keys(q.options).length<3||Object.values(q.options).some(v=>typeof v!=="string")||
+      !["OFFICIAL","DERIVED","UNRESOLVED","EXCLUDED"].includes(q.answer_status)||
+      (q.topic&&!topics.has(q.topic))||
+      (["OFFICIAL","DERIVED"].includes(q.answer_status)&&typeof q.answer!=="string"))
+    throw new Error("Invalid question, answer status or topic reference: "+(q?.id||"unknown"));
+   questionIds.add(q.id);
+  }
+ }
+ if(count!==323)throw new Error("Expected 323 questions, found "+count);
+ return {subjects:subjectIds.size,questions:count};
+}
+async function importFile(file){
+ const o=JSON.parse(await file.text());
+ validateImportedDataset(o);
+ if(DATA&&typeof window.confirm==="function"&&!window.confirm(
+   "Replace the existing local SILE dataset? First export a dataset backup under Offline data. This action does not reset your progress, but old scores may need review after an answer-status change."))return;
+ await dbPut("dataset",o);
+ DATA=o;flatten();subject="";activeTab="overview";
+ updateStatus();renderSubjects();updateContext();renderPaperDashboard();
+ toast("Structured dataset imported locally. Legal-answer certification is separate.");
+}
 async function backup(){if(!DATA)return;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(DATA)],{type:'application/json'}));a.download='SILE_iPad_dataset_backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 
 function bindStatic(){

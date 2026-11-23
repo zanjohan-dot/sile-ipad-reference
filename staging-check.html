@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#17324a">
+<title>SILE TEST — Staging Safety Check</title>
+<style>
+:root{font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#22313e;background:#eef3f6}
+*{box-sizing:border-box}body{margin:0}header{background:#17324a;color:white;padding:19px 20px}h1{margin:0;font-size:1.4rem}
+main{max-width:720px;margin:auto;padding:18px 15px 50px}
+.card{background:white;border:1px solid #d1dce2;border-radius:14px;padding:19px;margin:12px 0}
+h2{font-size:1.1rem;margin:0 0 12px}button,a.link{display:inline-block;min-height:46px;border:0;border-radius:10px;background:#19699e;color:white;padding:10px 17px;text-decoration:none;font:inherit;font-weight:700}
+button:disabled{background:#a5b2bb;color:#344651}code{overflow-wrap:anywhere;background:#eef3f6;padding:2px 5px;border-radius:4px}
+.notice{font-weight:700}ul{padding-left:22px}li{margin:8px 0}
+#result{padding:12px;border-radius:9px;background:#f2f6f9}
+.danger{color:#8c2424}.good{color:#165a34}.muted{color:#586a75}
+</style>
+</head>
+<body>
+<header><h1>SILE TEST · Staging safety check</h1><div>Pre-examination development candidate — not a certified legal reference</div></header>
+<main>
+<section class="card">
+<h2>1. Confirm a separate HTTPS origin</h2>
+<p>Production must remain at <code>zanjohan-dot.github.io</code>. This test app must be hosted on a different hostname, not a different folder or repository under the same host.</p>
+<div id="result" role="status" aria-live="polite">Checking this site…</div>
+</section>
+<section class="card">
+<h2>2. Test only synthetic study data first</h2>
+<ul>
+<li>Import <strong>SILE_Synthetic_323_Questions.json</strong> included in the staging ZIP.</li>
+<li>Test Learn, Ask, Rapid, Paper 1/2, question practice, revision flags and offline relaunch.</li>
+<li>Use Safari and the Home Screen app separately on your iPad.</li>
+<li>Do not import private course material, progress or calculator files until this environment is verified.</li>
+<li>Never remove the existing production icon or clear website data as part of testing.</li>
+</ul>
+<p id="openInfo" class="muted">The test app link unlocks only after the hostname check passes.</p>
+<button type="button" id="openApp" disabled>Open staging study app</button>
+</section>
+<section class="card">
+<h2>3. Privacy and limitations</h2>
+<p>This page checks the hostname and secure connection. It does not read, modify, upload or erase IndexedDB, browser caches, examination content or progress.</p>
+<p>The study app itself is under a legal-content NO-GO release hold. Offline AI is not verified on the actual iPad.</p>
+</section>
+</main>
+<script>
+(function(){
+"use strict";
+const root=document.getElementById("result"),button=document.getElementById("openApp"),info=document.getElementById("openInfo");
+const host=location.hostname.toLowerCase(),secure=location.protocol==="https:";
+const production=host==="zanjohan-dot.github.io",local=host==="localhost"||host==="127.0.0.1";
+if(production){
+ root.className="danger";root.textContent="STOP: This is the production GitHub Pages origin. Do not test or import staging data on this hostname.";
+}else if(!secure&&!local){
+ root.className="danger";root.textContent="STOP: An HTTPS connection is required for iPad staging.";
+}else{
+ root.className="good";root.textContent="Staging hostname check passed: "+location.origin+(local?" (local developer test only)":".");
+ info.textContent="The hostname is distinct from production. Use only the synthetic dataset for the initial test.";
+ button.disabled=false;
+ button.onclick=()=>{location.href="./"};
+}
+})();
+</script>
+</body>
+</html>

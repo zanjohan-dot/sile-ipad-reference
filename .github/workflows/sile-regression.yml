@@ -1,0 +1,76 @@
+name: SILE non-private regression checks
+concurrency:
+  group: sile-regression-${{ github.ref }}
+  cancel-in-progress: true
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [audit/search-reliability-20261123]
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check JavaScript syntax
+        run: |
+          node --check app.js
+          node --check retrieval-enhancements.js
+          node --check local-model.js
+          node --check study-ux.js
+          node --check tools-enhancements.js
+          node --check sw.js
+      - name: Run synthetic regression tests
+        run: |
+          node tests/search-sanity.test.js
+          node tests/worker-offline.test.js
+          node tests/import-validation.test.js
+          node tests/practice-persistence.test.js
+      - name: Run real headless Chrome smoke with synthetic dataset
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          command -v google-chrome
+          CHROME_BIN="$(command -v google-chrome)" node tests/browser-smoke.test.js
+      - name: Verify same-host TEST database cache and offline isolation in Chromium
+        run: CHROME_BIN="$(command -v google-chrome)" node tests/test-folder-isolation.test.js
+      - name: Run Linux WebKit touchscreen smoke with synthetic dataset
+        run: |
+          npx playwright install --with-deps webkit
+          node tests/webkit-offline-baseline.test.js | tee webkit-baseline.log
+          if grep -q 'CONTROL_BLOCKED' webkit-baseline.log; then
+            WEBKIT_SKIP_OFFLINE=1 BROWSER_ENGINE=webkit node tests/browser-smoke.test.js
+          else
+            BROWSER_ENGINE=webkit node tests/browser-smoke.test.js
+          fi
+      - name: Generate synthetic question bank for staging import
+        run: node -e "require('fs').writeFileSync('SILE_Synthetic_323_Questions.json',JSON.stringify(require('./tests/synthetic-fixture.js')))"
+      - name: Package public application shell for browser verification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sile-static-candidate
+          retention-days: 2
+          path: |
+            index.html
+            styles.css
+            app.js
+            retrieval-enhancements.js
+            local-model.js
+            study-ux.js
+            tools-enhancements.js
+            sw.js
+            reset.html
+            diagnostic.html
+            manifest.webmanifest
+            icon-192.png
+            icon-512.png
+            apple-touch-icon.png
+            SILE_Synthetic_323_Questions.json
+            staging-check.html
+            STAGING_IPAD_ACCEPTANCE.md
+            webkit-baseline.log
