@@ -115,7 +115,9 @@ async function run(){
  await step("Isolated staging origin and relative PWA manifest",async()=>{
   const stage=await context.newPage();
   try{
-   await stage.goto("http://localhost:"+port+"/",{waitUntil:"load"});
+   await stage.goto("http://localhost:"+port+"/staging-check.html",{waitUntil:"load"});
+   check(await stage.locator("#openApp").isEnabled(),"Staging gate incorrectly blocks a distinct local test origin");
+   await stage.locator("#openApp").click();
    await stage.locator("#importNow").waitFor({timeout:12000});
    check(await stage.locator("#statusBtn").innerText()==="No local data","Staging unexpectedly sees first origin's study dataset");
    const manifest=await stage.evaluate(async()=>{
