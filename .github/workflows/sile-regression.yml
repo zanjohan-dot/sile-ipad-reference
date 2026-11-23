@@ -1,4 +1,7 @@
 name: SILE non-private regression checks
+concurrency:
+  group: sile-regression-${{ github.ref }}
+  cancel-in-progress: true
 on:
   pull_request:
     branches: [main]
