@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#17324a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="SILE 2026">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" sizes="180x180" href="../apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css">
+<script>
+(function(){
+  function save(message){
+    try{sessionStorage.setItem('sile_test_last_startup_error',String(message).slice(0,240))}catch(e){}
+  }
+  window.addEventListener('error', function(e){save((e.message || 'Script loading error')+(e.filename?' ('+e.filename.split('/').pop()+')':''))});
+  window.addEventListener('unhandledrejection', function(e){save('Unhandled rejection: '+String(e.reason && e.reason.message || e.reason))});
+})();
+</script>
+<meta name="robots" content="noindex,nofollow">
+<title>SILE TEST · Synthetic Questions Only</title>
+</head>
+<body>
+<div style="background:#fff1c9;color:#432a00;padding:10px 14px;text-align:center;font-weight:700;line-height:1.4" role="note">TEST VERSION · SYNTHETIC QUESTIONS ONLY · Not a legal reference · <a href="./staging-check.html">How to test safely</a></div>
+<header class="appHeader">
+  <button id="navToggle" class="navToggle" aria-label="Show or hide subject navigation" aria-expanded="false">☰</button>
+  <div class="brandBlock">
+    <div class="brandTitle">SILE TEST · 2026</div>
+    <div id="contextLabel" class="brandContext">Offline reference</div>
+  </div>
+  <div class="modeSwitch" aria-label="Study mode">
+    <button data-mode="rapid" class="active">Rapid</button>
+    <button data-mode="learn">Learn</button>
+  </div>
+  <button id="searchBtn" class="headerAction urgentAction" aria-label="Ask a legal question using local study materials">Ask</button>
+  <button id="statusBtn" class="offlineBadge">No data</button>
+</header>
+
+<div class="appShell">
+  <aside id="sidebar" class="sidebar">
+    <div class="paperSwitch">
+      <button data-paper="1" class="active">Paper 1</button>
+      <button data-paper="2">Paper 2</button>
+    </div>
+    <div class="sideLabel">Subjects</div>
+    <nav id="subjects" class="subjectNav"></nav>
+    <div class="sideFooter">
+      <button id="toolsBtn" class="sideUtility">Tools</button>
+      <button id="progressBtn" class="sideUtility">My revision progress</button>
+      <button id="dataBtn" class="sideUtility">Offline data</button>
+    </div>
+  </aside>
+
+  <main class="mainArea">
+    <div id="screen" class="screen"></div>
+  </main>
+</div>
+
+<input id="fileInput" type="file" accept="application/json,.json" hidden>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="retrieval-enhancements.js?build=20261123c" defer></script>
+<script src="study-ux.js" defer></script>
+<script src="app.js?build=20261123c" defer></script>
+</body>
+</html>
