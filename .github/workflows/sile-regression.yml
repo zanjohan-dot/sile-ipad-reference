@@ -36,6 +36,8 @@ jobs:
           npm install --no-save --ignore-scripts playwright@1.56.1
           command -v google-chrome
           CHROME_BIN="$(command -v google-chrome)" node tests/browser-smoke.test.js
+      - name: Verify same-host TEST database cache and offline isolation in Chromium
+        run: CHROME_BIN="$(command -v google-chrome)" node tests/test-folder-isolation.test.js
       - name: Run Linux WebKit touchscreen smoke with synthetic dataset
         run: |
           npx playwright install --with-deps webkit
