@@ -93,7 +93,10 @@ async function run(){
   await page.locator("#progressBtn").click();
   check((await page.locator("#screen").innerText()).includes("questions marked for revision"),"Revision progress not persisted");
  });
- await step("Offline browser PWA relaunch",async()=>{
+ if(isWebKit&&process.env.WEBKIT_SKIP_OFFLINE==="1"){
+  steps.push({name:"Offline browser PWA relaunch",status:"BLOCKED",
+    detail:"Minimal Linux WebKit PWA also fails offline navigation with an internal browser error; actual iPadOS test required."});
+ }else await step("Offline browser PWA relaunch",async()=>{
   await page.waitForFunction(()=>'serviceWorker' in navigator && navigator.serviceWorker.controller!==null,null,{timeout:20000});
   await context.setOffline(true);
   // A fresh WebKit tab probes a separate navigation from the reload API.
@@ -143,7 +146,7 @@ async function run(){
   } finally {await stage.close()}
  });
  assert.equal(exceptions.length,0,"Uncaught browser JavaScript errors: "+exceptions.join("; "));
- console.log(JSON.stringify({verdict:"PASS",environment:isWebKit?"Linux WebKit touch emulation, synthetic dataset (NOT iPadOS)":"GitHub Actions headless Chrome, synthetic dataset",questions:323,steps,exceptions},null,2));
+ console.log(JSON.stringify({verdict:isWebKit&&process.env.WEBKIT_SKIP_OFFLINE==="1"?"ONLINE_PASS_OFFLINE_BLOCKED":"PASS",environment:isWebKit?"Linux WebKit touch emulation, synthetic dataset (NOT iPadOS)":"GitHub Actions headless Chrome, synthetic dataset",questions:323,steps,exceptions},null,2));
  } finally {await context.setOffline(false);await context.close();await browser.close();server.close()}
 }
 run().catch(e=>{console.error("BROWSER_SMOKE_FAILED:",e.stack||e);process.exitCode=1;server.close()});
