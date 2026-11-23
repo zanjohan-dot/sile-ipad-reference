@@ -93,16 +93,24 @@ async function run(){
   await page.locator("#progressBtn").click();
   check((await page.locator("#screen").innerText()).includes("questions marked for revision"),"Revision progress not persisted");
  });
- await step("Actual Chromium offline PWA relaunch",async()=>{
+ await step("Offline browser PWA relaunch",async()=>{
   await page.waitForFunction(()=>'serviceWorker' in navigator && navigator.serviceWorker.controller!==null,null,{timeout:20000});
   await context.setOffline(true);
-  await page.reload({waitUntil:"domcontentloaded",timeout:18000});
-  await page.waitForFunction(()=>document.getElementById("statusBtn")?.textContent.includes("323 questions"),null,{timeout:10000});
-  await page.locator("#searchBtn").click();
-  await page.locator("#findQuery").fill("fiduciary duties");
-  await page.locator("#findNow").click();
-  check(await page.locator('[data-question-index]').count()>0,"Offline question search failed");
-  await context.setOffline(false);
+  // A fresh WebKit tab probes a separate navigation from the reload API.
+  // Chrome retains the established reload regression for comparability.
+  const offlineTab=isWebKit?await context.newPage():page;
+  try{
+   if(isWebKit)await offlineTab.goto(base,{waitUntil:"domcontentloaded",timeout:18000});
+   else await offlineTab.reload({waitUntil:"domcontentloaded",timeout:18000});
+   await offlineTab.waitForFunction(()=>document.getElementById("statusBtn")?.textContent.includes("323 questions"),null,{timeout:10000});
+   await offlineTab.locator("#searchBtn").click();
+   await offlineTab.locator("#findQuery").fill("fiduciary duties");
+   await offlineTab.locator("#findNow").click();
+   check(await offlineTab.locator('[data-question-index]').count()>0,"Offline question search failed");
+  }finally{
+   await context.setOffline(false);
+   if(isWebKit)await offlineTab.close();
+  }
  });
  await step("Isolated staging origin and relative PWA manifest",async()=>{
   const stage=await context.newPage();
