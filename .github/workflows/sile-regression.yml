@@ -61,3 +61,5 @@ jobs:
             icon-512.png
             apple-touch-icon.png
             SILE_Synthetic_323_Questions.json
+            staging-check.html
+            STAGING_IPAD_ACCEPTANCE.md
