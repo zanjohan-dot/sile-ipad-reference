@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#17324a">
+<title>SILE TEST - Diagnostics</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#edf2f5;color:#1b2b38;font:16px/1.5 system-ui,-apple-system,sans-serif}
+header{background:#17324a;color:#fff;padding:20px 18px}h1{font-size:1.4rem;margin:0}main{max-width:670px;margin:20px auto;padding:0 15px 50px}
+.card{border:1px solid #dae2e7;background:white;border-radius:14px;padding:18px;margin:14px 0}
+h2{font-size:1.08rem;margin:0 0 10px}p{margin:9px 0}
+button,a.action{display:inline-block;border:0;border-radius:10px;padding:12px 15px;margin:7px 7px 7px 0;background:#17669d;color:white;font:inherit;font-weight:650;text-decoration:none}
+button:active{background:#0c4064}#touchStatus{font-weight:700;min-height:28px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f7f9;padding:14px;border-radius:8px;font-size:12px}
+.ok{color:#226b3d}.fail{color:#a12424}.warn{color:#916014}small{color:#536570}
+</style>
+</head>
+<body>
+<header><h1>SILE 2026 - iPad Diagnostics</h1><div>Safe, read-only checks - build 2026-11-23B</div></header>
+<main>
+<div class="card">
+<h2>1. Touch response</h2>
+<p>Tap the button below. Its number should increase every time you tap.</p>
+<button id="touch" type="button">Tap to test touch</button>
+<div id="touchStatus">Not tapped</div>
+</div>
+<div class="card">
+<h2>2. App checks</h2>
+<p>The checks do not delete, replace, download or display your exam materials.</p>
+<button id="run" type="button">Run diagnostics</button>
+<pre id="report">Tap Run diagnostics to begin.</pre>
+<button id="copy" type="button">Copy diagnostic report</button>
+<small id="copyStatus"></small>
+</div>
+<div class="card">
+<h2>3. Reopen the app</h2>
+<a class="action" href="./?build=20261123b">Open SILE app</a>
+<p><small>Do not clear Safari website data, remove the Home Screen icon, or import files again until the cause is established.</small></p>
+</div>
+</main>
+<script>
+(function(){
+"use strict";
+let taps=0, lastReport="";
+const timed=(p,label,ms=7000)=>Promise.race([p,new Promise((_,reject)=>setTimeout(()=>reject(new Error(label+" timed out")),ms))]);
+const $=id=>document.getElementById(id);
+$("touch").addEventListener("click",()=>{taps++;$("touchStatus").textContent="Touch works - "+taps+" tap(s)";});
+async function checkData(){
+ if(!("indexedDB" in window))return "NOT SUPPORTED";
+ return await new Promise(resolve=>{
+  let done=false;const finish=s=>{if(done)return;done=true;resolve(s)};
+  let r;
+  try{r=indexedDB.open("sile-ipad-test-v1",1)}catch(e){finish("ERROR "+e.name);return}
+  const timer=setTimeout(()=>finish("TIMEOUT opening IndexedDB"),6500);
+  r.onupgradeneeded=()=>{try{r.transaction.abort()}catch(e){}};
+  r.onerror=()=>{clearTimeout(timer);finish("ERROR "+(r.error?.name||"unknown"))};
+  r.onblocked=()=>{clearTimeout(timer);finish("BLOCKED by another open tab")};
+  r.onsuccess=()=>{
+   clearTimeout(timer);
+   try{
+    const db=r.result;
+    if(!db.objectStoreNames.contains("kv")){db.close();finish("Database exists; study store unavailable");return}
+    const tx=db.transaction("kv","readonly"),st=tx.objectStore("kv");
+    let result=[];
+    for(const key of ["dataset","study_progress_v1","sile_private_tools_2026_11_08"]){
+     const req=st.getKey(key);
+     req.onsuccess=()=>result.push(key+": "+(req.result===undefined?"missing":"present"));
+     req.onerror=()=>result.push(key+": cannot read");
+    }
+    tx.oncomplete=()=>{db.close();finish(result.join("; "))};
+    tx.onerror=()=>{db.close();finish("ERROR reading stored data")};
+   }catch(e){r.result.close();finish("ERROR "+e.name)}
+  };
+ });
+}
+async function checkFile(path){
+ try{
+  const r=await timed(fetch("./"+path+"?diag="+Date.now(),{cache:"no-store"}),"File request");
+  if(!r.ok)return "HTTP "+r.status;
+  const t=await timed(r.text(),"File response");
+  if(path==="app.js") return "HTTP 200; "+t.length+" chars; new startup: "+(t.includes("window.SILE_APP_READY = true")?"yes":"NO");
+  if(path==="sw.js") return "HTTP 200; "+(t.match(/sile-test-shell-v[0-9]+/)||["unknown"])[0];
+  return "HTTP 200; "+t.length+" chars";
+ }catch(e){return "ERROR "+e.name+": "+e.message}
+}
+async function run(){
+ $("report").textContent="Running checks...";
+ const lines=["SILE iPad diagnostic - 2026-11-23B","URL: "+location.origin+location.pathname,"Browser: "+navigator.userAgent,"Touch button: "+taps+" tap(s)"];
+ lines.push("Secure context: "+(window.isSecureContext?"yes":"no"));
+ lines.push("Service worker support: "+("serviceWorker" in navigator?"yes":"no"));
+ if("serviceWorker" in navigator){
+  try{
+   lines.push("Current controller: "+(navigator.serviceWorker.controller?.scriptURL||"none"));
+   const regs=await timed(navigator.serviceWorker.getRegistrations(),"Service worker check");
+   lines.push("Service worker registrations: "+regs.map(r=>r.scope).join(", "));
+  }catch(e){lines.push("Service worker inspection: "+e.message)}
+ }
+ if("caches" in window){
+  try{lines.push("SILE caches: "+(await timed(caches.keys(),"Cache check")).filter(k=>k.startsWith("sile-test-")).join(", "))}
+  catch(e){lines.push("Cache inspection: "+e.message)}
+ }
+ lines.push("Offline storage: "+await checkData());
+ lines.push("App JS: "+await checkFile("app.js"));
+ lines.push("Service worker JS: "+await checkFile("sw.js"));
+ lines.push("Saved startup error: "+(sessionStorage.getItem("sile_test_last_startup_error")||"none recorded"));
+ lastReport=lines.join("\n");
+ $("report").textContent=lastReport;
+}
+$("run").addEventListener("click",()=>run().catch(e=>$("report").textContent="Diagnostic failed: "+e.message));
+$("copy").addEventListener("click",async()=>{
+ try{await navigator.clipboard.writeText(lastReport||$("report").textContent);$("copyStatus").textContent="Copied"}
+ catch(e){$("copyStatus").textContent="Copy unavailable. Take a screenshot of the report."}
+});
+})();
+</script>
+</body>
+</html>
