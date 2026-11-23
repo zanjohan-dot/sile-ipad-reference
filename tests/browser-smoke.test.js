@@ -24,8 +24,12 @@ const dataset={meta:{built:"synthetic-browser-smoke"},subjects:Array.from({lengt
 assert.equal(dataset.subjects.reduce((n,s)=>n+s.questions.length,0),323);
 const server=http.createServer((req,res)=>{
  let url=decodeURIComponent((req.url||"/").split("?")[0]);
- if(!url.startsWith("/sile-ipad-reference/")){res.writeHead(404);res.end();return}
- let rel=url.slice("/sile-ipad-reference/".length)||"index.html";
+ // Test both the GitHub project path and a distinct staging origin at root.
+ const stageHost=(req.headers.host||"").split(":")[0]==="localhost";
+ if(!url.startsWith("/sile-ipad-reference/")&&!stageHost){res.writeHead(404);res.end();return}
+ let rel=url.startsWith("/sile-ipad-reference/")?url.slice("/sile-ipad-reference/".length):
+   (stageHost?url.slice(1):"");
+ rel=rel||"index.html";
  const file=path.resolve(ROOT,rel);
  if(!file.startsWith(ROOT+path.sep)||!fs.existsSync(file)||!fs.statSync(file).isFile()){res.writeHead(404);res.end();return}
  res.writeHead(200,{"Content-Type":TYPES[path.extname(file)]||"application/octet-stream","Cache-Control":"no-cache"});
@@ -112,6 +116,34 @@ async function run(){
   await page.locator("#findNow").click();
   check(await page.locator('[data-question-index]').count()>0,"Offline question search failed");
   await context.setOffline(false);
+ });
+ await step("Isolated staging origin and relative PWA manifest",async()=>{
+  const stage=await context.newPage();
+  try{
+   await stage.goto("http://localhost:"+port+"/",{waitUntil:"load"});
+   await stage.locator("#importNow").waitFor({timeout:12000});
+   check(await stage.locator("#statusBtn").innerText()==="No local data","Staging unexpectedly sees first origin's study dataset");
+   const manifest=await stage.evaluate(async()=>{
+    const link=document.querySelector('link[rel="manifest"]');
+    const url=new URL(link.getAttribute("href"),location.href);
+    return {url:url.href,manifest:await (await fetch(url)).json()};
+   });
+   check(new URL(manifest.url).origin==="http://localhost:"+port,"Manifest resolved on wrong origin");
+   check(manifest.manifest.start_url==="./"&&manifest.manifest.scope==="./","Manifest has hard-coded production path");
+   const stageData=JSON.parse(JSON.stringify(dataset));
+   stageData.subjects[0].questions[0].stem="STAGING_ONLY_SYNTHETIC_RECORD";
+   await stage.locator("#fileInput").setInputFiles({name:"staging_synthetic.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify(stageData))});
+   await stage.waitForFunction(()=>document.getElementById("statusBtn")?.textContent.includes("323 questions"),null,{timeout:12000});
+   await page.reload({waitUntil:"load"});
+   const productionData=await page.evaluate(async()=>{
+    const db=await new Promise((ok,no)=>{const rq=indexedDB.open("sile-ipad-stage3",1);rq.onsuccess=()=>ok(rq.result);rq.onerror=()=>no(rq.error)});
+    return await new Promise((ok,no)=>{const rq=db.transaction("kv").objectStore("kv").get("dataset");
+      rq.onsuccess=()=>{db.close();ok(rq.result?.subjects?.[0]?.questions?.[0]?.stem)};
+      rq.onerror=()=>{db.close();no(rq.error)}});
+   });
+   check(!productionData.includes("STAGING_ONLY_SYNTHETIC_RECORD"),"Staging import contaminated original-origin local data");
+   return "Distinct localhost and 127.0.0.1 browser origins retain different IndexedDB data";
+  } finally {await stage.close()}
  });
  assert.equal(exceptions.length,0,"Uncaught browser JavaScript errors: "+exceptions.join("; "));
  console.log(JSON.stringify({verdict:"PASS",environment:isWebKit?"Linux WebKit touch emulation, synthetic dataset (NOT iPadOS)":"GitHub Actions headless Chrome, synthetic dataset",questions:323,steps,exceptions},null,2));
