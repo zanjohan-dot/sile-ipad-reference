@@ -37,6 +37,8 @@ jobs:
         run: |
           npx playwright install --with-deps webkit
           BROWSER_ENGINE=webkit node tests/browser-smoke.test.js
+      - name: Generate synthetic question bank for staging import
+        run: node -e "require('fs').writeFileSync('SILE_Synthetic_323_Questions.json',JSON.stringify(require('./tests/synthetic-fixture.js')))"
       - name: Package public application shell for browser verification
         uses: actions/upload-artifact@v4
         with:
@@ -57,3 +59,4 @@ jobs:
             icon-192.png
             icon-512.png
             apple-touch-icon.png
+            SILE_Synthetic_323_Questions.json
