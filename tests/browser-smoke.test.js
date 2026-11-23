@@ -1,10 +1,10 @@
-/* Headless Chromium acceptance smoke. Synthetic dataset ONLY.
+/* Browser acceptance smoke (Chromium or WebKit). Synthetic dataset ONLY.
  * Requires 'playwright' package and an installed Chrome/Chromium executable.
  * This test does not import, transmit, or write real SILE course materials.
  */
 "use strict";
 const fs=require("node:fs"),http=require("node:http"),path=require("node:path"),assert=require("node:assert/strict");
-const {chromium}=require("playwright");
+const {chromium,webkit}=require("playwright");
 const ROOT=path.resolve(__dirname,"..");
 const TYPES={".html":"text/html",".js":"text/javascript",".css":"text/css",".png":"image/png",".webmanifest":"application/manifest+json"};
 const dataset={meta:{built:"synthetic-browser-smoke"},subjects:Array.from({length:8},(_,i)=>{
@@ -35,9 +35,14 @@ function check(condition,message){assert.ok(condition,message)}
 async function run(){
  await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
  const port=server.address().port;
+ const isWebKit=process.env.BROWSER_ENGINE==="webkit";
  const executable=process.env.CHROME_BIN||"/usr/bin/google-chrome";
- const browser=await chromium.launch({headless:true,executablePath:executable,args:["--no-sandbox","--disable-dev-shm-usage"]});
- const context=await browser.newContext({viewport:{width:1024,height:768}});
+ const browser=isWebKit?await webkit.launch({headless:true}):
+   await chromium.launch({headless:true,executablePath:executable,args:["--no-sandbox","--disable-dev-shm-usage"]});
+ // Approximate iPad portrait touch interaction in Linux WebKit. This is NOT iPadOS Safari.
+ const context=await browser.newContext(isWebKit?
+   {viewport:{width:820,height:1180},isMobile:true,hasTouch:true,deviceScaleFactor:2}:
+   {viewport:{width:1024,height:768}});
  const page=await context.newPage(),exceptions=[];
  page.on("pageerror",e=>exceptions.push(String(e)));
  const steps=[];
@@ -109,7 +114,7 @@ async function run(){
   await context.setOffline(false);
  });
  assert.equal(exceptions.length,0,"Uncaught browser JavaScript errors: "+exceptions.join("; "));
- console.log(JSON.stringify({verdict:"PASS",environment:"GitHub Actions headless Chrome, synthetic dataset",questions:323,steps,exceptions},null,2));
+ console.log(JSON.stringify({verdict:"PASS",environment:isWebKit?"Linux WebKit touch emulation, synthetic dataset (NOT iPadOS)":"GitHub Actions headless Chrome, synthetic dataset",questions:323,steps,exceptions},null,2));
  } finally {await context.setOffline(false);await context.close();await browser.close();server.close()}
 }
 run().catch(e=>{console.error("BROWSER_SMOKE_FAILED:",e.stack||e);process.exitCode=1;server.close()});
