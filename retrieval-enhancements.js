@@ -89,7 +89,7 @@ const aliases = [
  ["non disclosure agreement", "nda", "confidentiality agreement"],
  ["passing off", "misrepresenting goods as someone else's"],
  ["winding up", "wind up", "liquidation", "liquidate the company"],
- ["piercing the corporate veil", "lifting the corporate veil", "look behind the company"],
+ ["inability to pay", "cannot pay its debts", "company can t pay debts", "company cannot pay debts"],
  ["arrest of ship", "ship arrest", "arrest a vessel", "arrest a ship"],
  ["contract in restraint of trade", "non compete clause", "restraint of trade"],
  ["exclusive dealing", "exclusive supply arrangement"],
@@ -119,6 +119,7 @@ function sessionKey(s){
 function makeIndex(items){
  const docs=[],postings=new Map(),ids=new Map(),sessions=new Map(),stems=new Map(),optionLookup=new Map();
  const lessons=new Map(items.filter(it=>it.type==="LESSON").map(it=>[it.topicId,it.title]));
+ const lessonDocs=new Map();
  const subjects=new Map(items.map(it=>[normalize(it.subject),it.code]));
  const codes=new Map([...subjects.values()].map(code=>[normalize(code),code]));
  for(const it of items){
@@ -146,6 +147,7 @@ function makeIndex(items){
   const passages=q?[stem,...options,topic,normalize(q.authority),normalize(q.tested_rule)]:[title,normalize(it.text)];
   const doc={it,stem,options,topic,issue,key,sitting,passages,title};
   docs.push(doc);
+  if(it.type==="LESSON")lessonDocs.set(it.topicId,doc);
   addLookup(ids,normalize(q?.id),doc);
   addLookup(stems,stem,doc);
   for(const option of new Set(options))addLookup(optionLookup,option,doc);
@@ -157,7 +159,7 @@ function makeIndex(items){
    postings.get(word).push({doc,weight});
   }
  }
- return {docs,postings,ids,sessions,stems,optionLookup,subjects,codes,spelling:new Map()};
+ return {docs,postings,ids,sessions,stems,optionLookup,subjects,codes,lessonDocs,spelling:new Map()};
 }
 
 function getIndex(){
@@ -257,13 +259,15 @@ function evidence(){
   if(!source)return [];
   return idx.docs.filter(d=>d.key&&d!==source&&allowed(d)&&!excluded(d.it)).map(d=>{
    const sameTopic=d.it.obj.topic&&d.it.obj.topic===source.it.obj.topic;
-   let common=0,weight=0;
+   let common=0,rare=0,weight=0;
    for(const t of source.issue)if(d.issue.has(t)){
     common++;
-    weight+=Math.log(1+idx.docs.length/(1+(idx.postings.get(t)?.length||0)));
+    const frequency=idx.postings.get(t)?.length||0;
+    if(frequency<idx.docs.length*.18)rare++;
+    weight+=Math.log(1+idx.docs.length/(1+frequency));
    }
    const score=weight/Math.sqrt(Math.max(1,Math.min(d.issue.size,source.issue.size)))+(sameTopic?6:0)+(d.stem&&d.stem===source.stem?12:0);
-   return {...d.it,score,similar:sameTopic||common>=2};
+   return {...d.it,score,similar:sameTopic||(common>=2&&rare>=1&&common/Math.max(1,Math.min(source.issue.size,d.issue.size))>=.15)};
   }).filter(x=>x.similar).sort((a,b)=>b.score-a.score);
  }
  const structured=structuredMatches(query,idx);
@@ -322,7 +326,17 @@ function evidence(){
    (containsPhrase(doc.topic,query)?135:0);
   out.push({...doc.it,score,matched:[...row.matched],exact});
  }
- return out.sort((a,b)=>Number(b.exact)-Number(a.exact)||b.score-a.score);
+ const rank=(a,b)=>Number(b.exact)-Number(a.exact)||b.score-a.score;
+ out.sort(rank);
+ const linked=new Set(out.filter(x=>x.type==="LESSON").map(x=>x.topicId));
+ for(const hit of out.filter(x=>x.type==="QUESTION"&&!excluded(x)).slice(0,6)){
+  const lesson=idx.lessonDocs.get(hit.obj.topic);
+  if(!lesson||!allowed(lesson)||linked.has(lesson.it.topicId))continue;
+  linked.add(lesson.it.topicId);
+  out.push({...lesson.it,score:hit.score*.2,matched:[],exact:false});
+ }
+ return out.sort(rank);
+
 }
 function show(){
  const box=document.getElementById("findResults");

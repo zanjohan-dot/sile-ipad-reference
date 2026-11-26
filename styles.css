@@ -365,3 +365,5 @@ body.focusMode .mainArea{min-width:0}
  padding: 10px;
  font: inherit;
 }
+
+.questionWording p, .optionBox, .answerText { white-space: pre-wrap; }

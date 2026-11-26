@@ -301,7 +301,7 @@ function openQuestion(q){
   (status==='DERIVED'?'<div class="dataNote"><strong>Derived answer subject to audit.</strong> Check the original material. The 8 November answer bank has yet to be reconciled with the later review.</div>':'')+
   (incomplete?'<div class="dataNote">The source contains '+entries.length+' recorded choices. This question does not count toward official accuracy.</div>':'')+
   (excluded?'<div class="dataNote"><strong>Excluded from practice and scoring.</strong></div>':'')+
-  section('Factual scenario',q.scenario||q.facts)+section('Question',q.stem,'rule')+
+  section('Factual scenario',q.scenario||q.facts,'questionWording')+section('Question',q.stem,'rule questionWording')+
   '<section class="readSection"><h2>'+(rapid||excluded?'Recorded answer choices':'Choose your answer')+'</h2>'+
   (rapid||excluded?opts:window.SILEUX.questionAttemptUI(q,studyProgress.questions[q.id]))+'</section>'+
   (excluded?section('Exclusion basis',q.answer_basis):'<details id="answerBlock" class="readSection questionDetails"'+(rapid?' open':'')+
