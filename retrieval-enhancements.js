@@ -8,7 +8,7 @@ const tokens=s=>String(s||"").toLowerCase().match(/[a-z0-9]+(?:\.[0-9]+)?/g)?.fi
 let lastText="",lastMatches=[],lastSubjectScope=false,lastAll=true;
 
 const HISTORY_KEY="sile_search_history_v1";
-let inputTimer=null,visibleLimit=25;
+let inputTimer=null,visibleLimit=25,returnToQuestion=null;
 function history(){
  try{
   const stored=JSON.parse(localStorage.getItem(HISTORY_KEY)||"[]");
@@ -41,9 +41,10 @@ function showHistory(){
  });
  document.getElementById("clearFindHistory").onclick=()=>{saveHistory([]);showHistory();};
 }
-function open(it){
+function open(it,resultIndex){
  remember();
  const context={paper,subject};
+ const searchState={lastText,lastAll,lastSubjectScope,similarSource,visibleLimit,returnToQuestion};
  const scroll=document.getElementById("screen").scrollTop;
  subject=it.code;paper=it.paper;
  function sync(){
@@ -60,11 +61,17 @@ function open(it){
  else if(it.type==="QUESTION")openQuestion(it.obj);
  const back=document.getElementById("backBtn");
  if(back){
-  back.textContent="Back to Search Results";
+  const label=document.getElementById("questionBackLabel");
+  if(label){
+   label.innerHTML='Back<span class="questionBackSuffix"> to results</span>';
+   back.setAttribute("aria-label","Back to results");
+  }else back.textContent="Back to results";
   back.onclick=()=>{
    ({paper,subject}=context);
+   ({lastText,lastAll,lastSubjectScope,similarSource,visibleLimit,returnToQuestion}=searchState);
    sync();
    render(true);
+   document.querySelector('[data-find-index="'+resultIndex+'"]')?.focus({preventScroll:true});
    document.getElementById("screen").scrollTop=scroll;
   };
  }
@@ -372,11 +379,11 @@ function show(){
     if(!group.length)return "";
     const shown=(g===0||g===5)?group:group.slice(0,visibleLimit);
     return '<section class="readSection"><h2>'+groups[g]+' ('+group.length+')</h2>'+
-     shown.map(({x,i})=>'<button class="contentRow" data-find-index="'+i+'"><div class="rowTop"><span class="rowType">'+E(x.type)+'</span><span class="rowMeta">Paper '+E(x.paper)+' · '+E(x.subject)+'</span></div><div class="rowTitle">'+E(x.title)+'</div><div class="rowExcerpt">'+E(String(x.type==="QUESTION"?x.obj.stem:x.text).slice(0,350))+'</div><div class="sourceMeta">'+
-     E([x.obj?.id,x.obj?.sitting,x.obj?.answer_status].filter(Boolean).join(" · "))+'</div></button>').join("")+
+     shown.map(({x,i})=>'<button class="contentRow" data-find-index="'+i+'"><div class="rowTop"><span class="rowType">'+E(x.type)+'</span><span class="rowMeta">Paper '+E(x.paper)+' · '+E(x.subject)+'</span></div><div class="rowTitle">'+E(x.type==="QUESTION"?(x.obj.id||x.title):x.title)+'</div><div class="rowExcerpt">'+E(String(x.type==="QUESTION"?x.obj.stem:x.text).slice(0,350))+'</div><div class="sourceMeta">'+
+     E([x.obj?.sitting,x.obj?.answer_status].filter(Boolean).join(" · "))+'</div></button>').join("")+
      (shown.length<group.length?'<p class="readerMeta">Showing '+shown.length+' of '+group.length+'</p>':'')+'</section>';
    }).join("")+(rows.some((group,i)=>i!==0&&i!==5&&group.length>visibleLimit)?'<button class="secondaryButton" id="showMoreMatches">Show more results</button>':'');
- box.querySelectorAll("[data-find-index]").forEach(el=>el.onclick=()=>open(lastMatches[Number(el.dataset.findIndex)]));
+ box.querySelectorAll("[data-find-index]").forEach(el=>el.onclick=()=>open(lastMatches[Number(el.dataset.findIndex)],Number(el.dataset.findIndex)));
  const more=document.getElementById("showMoreMatches");
  if(more)more.onclick=()=>{visibleLimit+=25;show();};
 }
@@ -395,15 +402,19 @@ function render(preserve=false){
   lastAll=true;
   lastSubjectScope=false;
   similarSource=null;
+  returnToQuestion=null;
   visibleLimit=25;
  }
  const rev=mode==="learn";
- setScreen('<div class="findPage"><h1 class="pageTitle">Search</h1><div class="searchPanel"><label class="findLabel" for="findQuery">Question, key facts or legal issue</label><textarea id="findQuery" rows="3" placeholder="e.g. Dec 2025 Q18, BF-D25-01 or ship arrest"></textarea><div class="findControls"><label><input id="findSubjectOnly" type="checkbox" '+(lastSubjectScope?"checked":"")+(subject?"":" disabled")+'> This subject only</label><label><input id="findAllPapers" type="checkbox" '+(lastAll?"checked":"")+'> Include both papers</label><button id="findNow" class="primaryButton">Search</button></div></div><div id="findHistory"></div><div id="findResults" class="searchResults" aria-live="polite"></div>'+(rev?'<div id="modelPanel" class="localSearchSetup"></div>':'')+'</div>');
+ setScreen('<div class="findPage"><h1 class="pageTitle">'+(similarSource?'Similar questions':'Search')+'</h1>'+(returnToQuestion?'<button id="returnToQuestion" class="backButton">← Back to question</button>':'')+'<div class="searchPanel"><label class="findLabel" for="findQuery">Question, key facts or legal issue</label><textarea id="findQuery" rows="3" placeholder="e.g. Dec 2025 Q18, BF-D25-01 or ship arrest"></textarea><div class="findControls"><label><input id="findSubjectOnly" type="checkbox" '+(lastSubjectScope?"checked":"")+(subject?"":" disabled")+'> This subject only</label><label><input id="findAllPapers" type="checkbox" '+(lastAll?"checked":"")+'> Include both papers</label><button id="findNow" class="primaryButton">Search</button></div></div><div id="findResults" class="searchResults" aria-live="polite"></div><div id="findHistory"></div>'+(rev?'<div id="modelPanel" class="localSearchSetup"></div>':'')+'</div>');
+ const backToQuestion=document.getElementById("returnToQuestion");
+ if(backToQuestion)backToQuestion.onclick=returnToQuestion;
  const input=document.getElementById("findQuery");
  input.value=lastText;
  input.oninput=e=>{
   lastText=e.target.value;
   similarSource=null;
+  returnToQuestion=null;
   visibleLimit=25;
   clearTimeout(inputTimer);
   inputTimer=setTimeout(show,170);
@@ -434,7 +445,8 @@ async function aiStatus(){
 }
 window.SILEFIND={
  render,aiStatus,
- findSimilar:q=>{
+ findSimilar:(q,back)=>{
+  returnToQuestion=back;
   similarSource=q;
   lastText=String(q.really_testing||q.tested_rule||q.stem||q.id);
   lastAll=true;

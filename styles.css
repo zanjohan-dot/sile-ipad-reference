@@ -367,3 +367,101 @@ body.focusMode .mainArea{min-width:0}
 }
 
 .questionWording p, .optionBox, .answerText { white-space: pre-wrap; }
+
+/* Question navigation occupies its own row above the scrolling reading pane. */
+body { display: flex; flex-direction: column; height: 100dvh; }
+.appHeader { flex: 0 0 auto; }
+.appShell { flex: 1; height: auto; position: relative; }
+body.questionMode .appHeader { display: none; }
+body.questionMode .mainArea {
+ display: grid;
+ grid-template-rows: auto minmax(0, 1fr);
+}
+body.questionMode .screen {
+ min-height: 0;
+ padding: 1.15rem max(1rem, env(safe-area-inset-right)) max(2rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+}
+.questionBar:not([hidden]) {
+ display: flex;
+ align-items: center;
+ justify-content: space-between;
+ gap: .75rem;
+ padding: max(.3rem, env(safe-area-inset-top)) max(.75rem, env(safe-area-inset-right)) .3rem max(.75rem, env(safe-area-inset-left));
+ background: var(--surface);
+ border-bottom: 1px solid var(--line);
+}
+.questionBar .backButton { text-align: left; overflow-wrap: anywhere; padding-block: .35rem; }
+.questionBarContext {
+ min-width: 0;
+ display: flex;
+ justify-content: flex-end;
+ flex-wrap: wrap;
+ align-items: baseline;
+ gap: .125rem .6rem;
+ text-align: right;
+ overflow-wrap: anywhere;
+}
+.questionBarContext span { color: #47586a; font-size: .84rem; }
+.questionReader { max-width: 67ch; font-size: 1.125rem; line-height: 1.65; overflow-wrap: anywhere; }
+.questionReader .pageTitle { font-size: 1.45em; margin-block-end: .65em; }
+.questionReader .readerMeta { color: #47586a; font-size: .86rem; }
+.questionReader .readSection { padding: .875rem clamp(.75rem, 2vw, 1.2rem); }
+.questionReader h2 { font-size: 1.04em; line-height: 1.35; }
+.questionKey {
+ background: #e9f1f7;
+ border: 1px solid #bccfdd;
+ border-left: 4px solid #245977;
+ border-radius: 9px;
+ padding: .65rem .9rem;
+}
+.questionKey h2, .questionKey p { margin: 0; }
+.questionKey p { font-size: 1.2em; line-height: 1.35; font-weight: 760; }
+.questionKey .provenanceStrip { margin: .3rem 0 0; }
+.questionKey .badge { padding-block: .2em; line-height: 1.3; }
+.questionAudit { color: #634613; font-size: .88em; margin: .45rem 0; }
+.questionJump {
+ border: 0;
+ background: transparent;
+ color: #175984;
+ text-decoration: underline;
+ min-height: 44px;
+ padding-inline: .25rem;
+}
+#questionReasoning p + p { margin-top: .85em; }
+.questionReader .answerText, .questionReader .conceptPlain { min-width: 0; }
+.questionReader .questionResources .readSection .readSection { border: 0; padding-inline: 0; }
+.questionReader .answerDisclosure > summary {
+ background: var(--nav);
+ color: #fff;
+ border-radius: 8px;
+ padding: .55rem .85rem;
+}
+.questionReader .answerDisclosure .questionReview { margin-top: .7rem; }
+.answerDisclosure:not([open]) > .questionReview { display: none; }
+#returnToQuestion { margin-bottom: .7rem; }
+#findHistory { margin-top: 1.1rem; }
+@media (min-width: 631px) and (max-width: 800px) {
+ .appHeader { grid-template-columns: 44px minmax(0,1fr) auto auto; grid-template-areas: "nav brand mode search" "status status status"; }
+ .navToggle { grid-area: nav; display: grid; place-items: center; }
+ .appShell { grid-template-columns: minmax(0,1fr); }
+ .sidebar { position: fixed; inset: 112px auto 0 0; width: min(270px,82vw); z-index: 30; transform: translateX(-110%); }
+ body.navOpen .sidebar { transform: translateX(0); }
+}
+
+@media (max-width: 800px) {
+ .sidebar { position: absolute; inset: 0 auto 0 0; }
+}
+@media (max-width: 460px) {
+ .appHeader { grid-template-areas: "nav brand brand" "mode mode search"; height: auto; min-height: 106px; }
+ #statusBtn, .questionBackSuffix { display: none; }
+ .questionBar .backButton { white-space: nowrap; }
+ .questionBarContext strong { font-size: .9rem; }
+ .questionReader .pageTitle { font-size: 1.22em; margin-block-end: .4em; }
+}
+
+.questionAnswerNotes { display: flex; flex-wrap: wrap; gap: .3rem; margin-block: .35rem; }
+@media (max-width: 460px) {
+ body.questionMode .screen { padding-top: .6rem; }
+ .questionReader .pageTitle { margin-block-end: .2em; }
+ .questionKey { padding: .45rem .6rem; }
+}
