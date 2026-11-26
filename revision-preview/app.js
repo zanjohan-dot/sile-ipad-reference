@@ -41,7 +41,10 @@ function saveStudyProgress(field,id,update){
  });
 }
 function toast(msg){const t=$('#toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',1800)}
-function setScreen(html){$('#screen').innerHTML='<div class="screenInner">'+html+'</div>';$('#screen').scrollTop=0}
+function setScreen(html){
+ const bar=$('#questionBar');
+ if(!bar.hidden){bar.hidden=true;bar.replaceChildren();document.body.classList.remove('questionMode');}
+$('#screen').innerHTML='<div class="screenInner">'+html+'</div>';$('#screen').scrollTop=0}
 function currentSubject(){return DATA?DATA.subjects.find(s=>s.code===subject):null}
 function topicMeta(s,id){return asList(s&&s.topics).find(t=>t.id===id)||null}
 function questionCount(){return DATA?DATA.subjects.reduce((n,s)=>n+asList(s.questions).length,0):0}
@@ -224,16 +227,22 @@ function renderLearnList(s){
  '<p class="pageLead">Choose one lesson. Learn the idea first, then the words, legal rule, example, exam trap and self-check. No previous knowledge is assumed.</p>'+
  '<div class="learnGrid">'+cards+'</div>';
 }
-function provenanceBadges(q){
+function answerClassification(q){
   const status=String(q.answer_status||'').toUpperCase();let out='';
   if(status==='OFFICIAL')out+='<span class="badge official">OFFICIAL SILE ANSWER</span>';
   else if(status==='DERIVED')out+='<span class="badge derived">DERIVED - NOT OFFICIAL</span>';
   else if(status==='EXCLUDED')out+='<span class="badge unresolved">EXCLUDED</span>';
   else if(status.includes('UNRESOLVED'))out+='<span class="badge unresolved">UNRESOLVED - NOT SCORED</span>';
+  return out;
+}
+function answerProvenance(q){
+  let out='';
   if(String(q.answer_basis||'').includes('SOURCE CONFLICT')||String(q.notes||'').includes('SOURCE CONFLICT'))out+='<span class="badge conflict">SOURCE CONFLICT</span>';
   if(q.confidence)out+='<span class="badge neutral">Confidence: '+esc(q.confidence)+'</span>';
   return out;
 }
+
+function provenanceBadges(q){return answerClassification(q)+answerProvenance(q)}
 
 function renderQuestionList(s){
   const qs=asList(s.questions);
@@ -273,6 +282,24 @@ function questionDetails(label,body,id){
   (body||'<p>No source text recorded for this section.</p>')+'</details>';
 }
 
+function questionBar(q){
+ const bar=$('#questionBar');
+ bar.innerHTML='<button id="backBtn" class="backButton"><span aria-hidden="true">←</span> <span id="questionBackLabel">Back</span></button>'+
+  '<div class="questionBarContext"><strong>'+esc(q.id)+'</strong><span>'+(mode==='rapid'?'Rapid':'Learn')+'</span></div>';
+ bar.hidden=false;
+ document.body.classList.add('questionMode');
+}
+
+function reasoningSection(value){
+ if(typeof value!=='string'||!value.trim())return section('Recorded reasoning',value);
+ // Use only markers already present in the source and escape all source text.
+ const boundary=/(?<=\s)(?=(?:Step \d+\s*[-–—:.]|(?:\(?[ivxlcdm]+[.)]?)\s+(?:TRUE|FALSE)\b))/gi;
+ const blocks=value.split(/\n\s*\n|\r?\n|(?<=\s)(?=\d+\.\s+(?:Governing rule|Polarity check|Analysis|Application|Conclusion|Result)\b)/i)
+  .flatMap(line=>line.split(boundary)).map(line=>line.trim()).filter(Boolean);
+ return '<section id="questionReasoning" class="readSection" tabindex="-1"><h2>Recorded reasoning</h2>'+
+  blocks.map(line=>'<p>'+esc(line)+'</p>').join('')+'</section>';
+}
+
 function openQuestion(q){
  const rapid=mode==='rapid';
  const status=String(q.answer_status||'').toUpperCase();
@@ -286,39 +313,68 @@ function openQuestion(q){
  const opts='<div class="optionList">'+entries.map(([k,v])=>'<div class="optionBox"><strong>'+esc(k)+'.</strong> '+esc(v)+'</div>').join('')+'</div>';
  const perOption=entries.map(([key])=>'<div class="conceptCard"><div class="conceptTerm">Option '+esc(key)+'</div><div class="conceptPlain">'+
   esc(q.option_expl?.[key]||'No explanation recorded for this option.')+'</div></div>').join('');
- const inner=section('Recorded answer',answer,'answer')+
-  section('Rule tested',q.tested_rule,'rule')+
-  section('Recorded reasoning',q.explanation)+
+ const provenance='<div class="provenanceStrip">'+provenanceBadges(q)+'</div>';
+ const key='<section class="questionKey"><h2>Recorded answer</h2><p>'+esc(answer)+'</p><div class="provenanceStrip">'+answerClassification(q)+'</div></section>';
+ const secondary=answerProvenance(q);
+ const answerNotes=secondary?'<div class="questionAnswerNotes">'+secondary+'</div>':'';
+ const warning=(status==='DERIVED'?'<p class="questionAudit"><strong>Derived answer subject to audit.</strong> The 8 November bank has yet to be reconciled with the later review. Check the original material.</p>':'');
+ const source=section('Source attribution',q.source||[q.sitting,q.course_material].filter(Boolean));
+ const explanation='<div id="questionReasoningStart" tabindex="-1">'+section('Rule tested',q.tested_rule,'rule')+section('Exam trap',q.trap,'trap')+
+  reasoningSection(q.explanation)+
   (q.official_explanation!==q.explanation?section('Official explanation',q.official_explanation):'')+
-  section('Exam trap',q.trap,'trap')+
-  section('Common mistake',q.common_mistake)+section('Answer basis',q.answer_basis,'warning');
+  section('Common mistake',q.common_mistake)+section('Answer basis',q.answer_basis,'warning')+'</div>';
  const layman=section('What the question is testing',q.really_testing)+section('Key factual clue',q.key_clue)+section('How to approach it',q.fastest_route);
+ const resources='<div class="questionResources">'+
+  questionDetails('Explain in Layman Terms',layman,'plainExplanation')+
+  questionDetails('Explain Each Option',perOption,'optionExplanations')+
+  questionDetails('Show Legal Authority',section('Authority',q.authority)+section('Course material',q.course_material)+section('Contact Session guidance',q.cs_guidance),'legalAuthority')+'</div>';
+ const review='<div id="answerContent" class="questionReview" tabindex="-1">'+(rapid?explanation+resources:key+warning+answerNotes+resources+explanation)+source+'</div>';
+ const similar='<div class="studyActions"><button id="findSimilar" class="secondaryButton">Find Similar Questions</button></div>';
  enterFocus();
- setScreen('<div class="reader" data-question-id="'+esc(q.id)+'">'+focusHeader()+
-  '<div class="readerMeta">'+esc(q.sitting||q.category||'Source question')+' · '+esc(q.id)+'</div>'+
-  '<h1 class="pageTitle">'+esc((q.label||'Question')+(q.qno?' · Q'+q.qno:''))+'</h1>'+
-  '<div class="provenanceStrip">'+provenanceBadges(q)+'</div>'+
-  (status==='DERIVED'?'<div class="dataNote"><strong>Derived answer subject to audit.</strong> Check the original material. The 8 November answer bank has yet to be reconciled with the later review.</div>':'')+
+ setScreen('<div class="reader questionReader" data-question-id="'+esc(q.id)+'">'+
+
+  '<h1 class="pageTitle" id="questionTitle" tabindex="-1">Question '+esc(q.qno||q.id)+'</h1>'+
+  (rapid&&!excluded?key+warning+answerNotes+'<button id="jumpToReasoning" class="questionJump">Read reasoning ↓</button>':excluded?provenance:'')+
+  '<div class="readerMeta">'+esc(q.sitting||q.category||'Source question')+'</div>'+
   (incomplete?'<div class="dataNote">The source contains '+entries.length+' recorded choices. This question does not count toward official accuracy.</div>':'')+
   (excluded?'<div class="dataNote"><strong>Excluded from practice and scoring.</strong></div>':'')+
   section('Factual scenario',q.scenario||q.facts,'questionWording')+section('Question',q.stem,'rule questionWording')+
-  '<section class="readSection"><h2>'+(rapid||excluded?'Recorded answer choices':'Choose your answer')+'</h2>'+
+  '<section class="readSection questionChoices"><h2>'+(rapid||excluded?'Recorded answer choices':'Choose your answer')+'</h2>'+
   (rapid||excluded?opts:window.SILEUX.questionAttemptUI(q,studyProgress.questions[q.id]))+'</section>'+
-  (excluded?section('Exclusion basis',q.answer_basis):'<details id="answerBlock" class="readSection questionDetails"'+(rapid?' open':'')+
-   '><summary>'+(rapid?'Recorded Answer':'Show Answer')+'</summary><div id="answerContent">'+inner+'</div></details>'+
-   questionDetails('Explain in Layman Terms',layman,'plainExplanation')+
-   questionDetails('Explain Each Option',perOption,'optionExplanations')+
-   questionDetails('Show Legal Authority',section('Authority',q.authority)+section('Course material',q.course_material)+section('Contact Session guidance',q.cs_guidance),'legalAuthority')+
-   '<div class="studyActions"><button id="findSimilar" class="secondaryButton">Find Similar Questions</button></div>')+
-  section('Source attribution',q.source||[q.sitting,q.course_material].filter(Boolean))+
+  (excluded?section('Exclusion basis',q.answer_basis)+source:
+   similar+(rapid?review:'<details id="answerBlock" class="questionDetails answerDisclosure"><summary>Show Answer</summary>'+review+'</details>'))+
   '<details class="readSection questionDetails"><summary>Bookmark and notes</summary><div class="studyActions">'+
   '<label><input type="checkbox" id="questionBookmark"'+(settings.bookmarked?' checked':'')+'> Bookmark this question</label></div>'+
   '<label for="questionNote">My notes</label><textarea id="questionNote" rows="3" maxlength="6000">'+esc(settings.note||'')+'</textarea>'+
   '<div class="studyActions"><button id="saveQuestionNote" type="button" class="secondaryButton">Save bookmark and notes</button></div>'+
   '<p id="reviewFeedback" role="status"></p></details></div>');
+ questionBar(q);
  bindBack();
- const similar=$('#findSimilar');
- if(similar)similar.onclick=()=>window.SILEFIND.findSimilar(q);
+ $('#backBtn').focus({preventScroll:true});
+ const jump=$('#jumpToReasoning');
+ if(jump)jump.onclick=()=>{
+  const target=$('#questionReasoningStart');
+  target.scrollIntoView({block:'start'});
+  target.focus({preventScroll:true});
+ };
+ const related=$('#findSimilar');
+ if(related)related.onclick=()=>{
+  const back=$('#backBtn');
+  const returnToResults=back.onclick;
+  const label=back.innerHTML;
+  const accessibleLabel=back.getAttribute("aria-label");
+  const scroll=$('#screen').scrollTop;
+  const openPanels=$$('.questionReader details[open]').map(el=>el.id).filter(Boolean);
+  window.SILEFIND.findSimilar(q,()=>{
+   openQuestion(q);
+   $('#backBtn').innerHTML=label;
+   if(accessibleLabel)$('#backBtn').setAttribute('aria-label',accessibleLabel);
+   $('#backBtn').onclick=returnToResults;
+   for(const id of openPanels)document.getElementById(id).open=true;
+   $('#screen').scrollTop=scroll;
+   $('#findSimilar').focus({preventScroll:true});
+  });
+ };
  $('#saveQuestionNote').onclick=async()=>{
   const feedback=$('#reviewFeedback');
   const entry={bookmarked:$('#questionBookmark').checked,note:$('#questionNote').value.trim()};
@@ -331,7 +387,8 @@ function openQuestion(q){
  function reveal(selected){
   $('#practiceFeedback').textContent=window.SILEUX.interpretation(q,selected);
   $('#answerBlock').open=true;
-  $('#answerBlock').scrollIntoView({block:'nearest'});
+  $('#answerBlock').scrollIntoView({block:'start'});
+  $('#answerBlock > summary').focus({preventScroll:true});
  }
  $('#submitPractice').onclick=async()=>{
   const selected=document.querySelector('input[name="practiceChoice"]:checked');

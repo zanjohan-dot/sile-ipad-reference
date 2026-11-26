@@ -1,9 +1,9 @@
 /* SILE app shell. Preserve unrelated caches, including private WebLLM model weights. */
-const CACHE="sile-revision-preview-shell-v18";
+const CACHE="sile-revision-preview-shell-v19";
 const RUNTIME_CACHE="sile-revision-preview-runtime-v1";
 const ASSETS=[
- "./","./index.html","./styles.css?v=18","./app.js?v=18","./study-ux.js?v=18","./tools-enhancements.js?v=18",
- "./retrieval-enhancements.js?v=18","./local-model.js?v=18","./diagnostic.html","./manifest.webmanifest",
+ "./","./index.html","./styles.css?v=19","./app.js?v=19","./study-ux.js?v=19","./tools-enhancements.js?v=19",
+ "./retrieval-enhancements.js?v=19","./local-model.js?v=19","./diagnostic.html","./manifest.webmanifest",
  "./icon-192.png","./icon-512.png","./apple-touch-icon.png"
 ];
 const scope=new URL(self.registration.scope);
@@ -11,6 +11,7 @@ const shellAssets=new Set(ASSETS.map(path=>new URL(path,scope).href));
 const OWNED_CACHE=/^sile-revision-preview-shell-v/;
 self.addEventListener("install",event=>event.waitUntil(
  caches.open(CACHE).then(cache=>cache.addAll(ASSETS.map(path=>new Request(new URL(path,scope),{cache:"reload"}))))
+  .then(()=>self.skipWaiting())
 ));
 self.addEventListener("activate",event=>event.waitUntil(
  caches.keys().then(keys=>Promise.all(keys.filter(k=>OWNED_CACHE.test(k)&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())
