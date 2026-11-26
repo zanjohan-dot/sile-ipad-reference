@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#17324a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="SILE Revision Preview">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css?v=18">
+<script>
+(function(){
+  function save(message){
+    try{sessionStorage.setItem('sile_last_startup_error',String(message).slice(0,240))}catch(e){}
+  }
+  window.addEventListener('error', function(e){save((e.message || 'Script loading error')+(e.filename?' ('+e.filename.split('/').pop()+')':''))});
+  window.addEventListener('unhandledrejection', function(e){save('Unhandled rejection: '+String(e.reason && e.reason.message || e.reason))});
+})();
+</script>
+<title>SILE Part B 2026 Revision Preview</title>
+</head>
+<body>
+<header class="appHeader">
+  <button id="navToggle" class="navToggle" aria-label="Show or hide subject navigation" aria-expanded="false">☰</button>
+  <div class="brandBlock">
+    <div class="brandTitle">SILE Revision Preview</div>
+    <div id="contextLabel" class="brandContext">Offline reference</div>
+  </div>
+  <div class="modeSwitch" aria-label="Study mode">
+    <button data-mode="rapid" class="active">Rapid</button>
+    <button data-mode="learn">Learn</button>
+  </div>
+  <button id="searchBtn" class="headerAction urgentAction">Search</button>
+  <button id="statusBtn" class="offlineBadge">No data</button>
+</header>
+
+<div class="appShell">
+  <aside id="sidebar" class="sidebar">
+    <div class="paperSwitch">
+      <button data-paper="1" class="active">Paper 1</button>
+      <button data-paper="2">Paper 2</button>
+    </div>
+    <div class="sideLabel">Subjects</div>
+    <nav id="subjects" class="subjectNav"></nav>
+    <div class="sideFooter">
+      <button id="toolsBtn" class="sideUtility">Tools</button>
+      <button id="progressBtn" class="sideUtility">My revision progress</button>
+      <button id="dataBtn" class="sideUtility">Offline data</button>
+    </div>
+  </aside>
+
+  <main class="mainArea">
+    <div id="screen" class="screen"></div>
+  </main>
+</div>
+
+<input id="fileInput" type="file" accept="application/json,.json" hidden>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="tools-enhancements.js?v=18" defer></script>
+<script src="retrieval-enhancements.js?v=18" defer></script>
+<script src="local-model.js?v=18" defer></script>
+<script src="study-ux.js?v=18" defer></script>
+<script src="app.js?v=18" defer></script>
+</body>
+</html>
