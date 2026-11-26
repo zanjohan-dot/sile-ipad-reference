@@ -6,6 +6,7 @@ const E=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;","
 const normalize=s=>String(s||"").normalize("NFKC").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
 const tokens=s=>String(s||"").toLowerCase().match(/[a-z0-9]+(?:\.[0-9]+)?/g)?.filter(w=>(w.length>1||/^[0-9]$/.test(w))&&!STOP.has(w))||[];
 let lastText="",lastMatches=[],lastSubjectScope=false,lastAll=true;
+let indexedFlat=null,indexedDocs=[],indexedDf=new Map();
 function open(it){
  subject=it.code;paper=it.paper;document.querySelectorAll("[data-paper]").forEach(b=>b.classList.toggle("active",Number(b.dataset.paper)===paper));renderSubjects();updateContext();
  if(it.type==="RULE")openRule(it.obj);
@@ -20,22 +21,22 @@ function evidence(){
  if(!DATA)return [];
  const all=flat.filter(x=>(lastAll||x.paper===paper)&&(!lastSubjectScope||!subject||x.code===subject));
  const qq=new Set(tokens(lastText));const query=normalize(lastText);if(!query)return [];
- const docs=all.map(it=>({it,ti:new Set(tokens(it.title)),tx:new Set(tokens([it.text,it.title,it.subject,it.code,it.obj?.id,it.obj?.qno,it.obj?.sitting,it.obj?.category,it.obj?.topic,it.obj?.source,JSON.stringify(it.obj?.options||{})].join(" ")))}));
- const df=new Map();for(const x of docs)for(const t of new Set([...x.ti,...x.tx]))df.set(t,(df.get(t)||0)+1);
+ if(indexedFlat!==flat){indexedFlat=flat;indexedDocs=flat.map(it=>({it,ti:new Set(tokens(it.title)),tx:new Set(tokens([it.text,it.title,it.subject,it.code,it.obj?.id,it.obj?.qno,it.obj?.sitting,it.obj?.category,it.obj?.topic,it.obj?.source,JSON.stringify(it.obj?.options||{}),JSON.stringify(it.obj?.keywords||[])].join(" "))),stem:normalize(it.obj?.stem),id:normalize(it.obj?.id)}));indexedDf=new Map();for(const x of indexedDocs)for(const t of new Set([...x.ti,...x.tx]))indexedDf.set(t,(indexedDf.get(t)||0)+1);}
+ const allowed=new Set(all);const docs=indexedDocs.filter(x=>allowed.has(x.it));const df=indexedDf;
  const n=docs.length,out=[];
  for(const x of docs){
 
   let score=0,matched=[];
   for(const t of qq){if(!x.ti.has(t)&&!x.tx.has(t))continue;const idf=Math.log(1+(n+1)/(1+(df.get(t)||0)));score+=(x.ti.has(t)?6:2)*idf;matched.push(t)}
-  const stem=normalize(x.it.obj?.stem);const exact=x.it.type==="QUESTION"&&stem.length>0&&(query===stem||query===normalize([x.it.obj.stem,...Object.values(x.it.obj.options||{})].join(" ")));
-  if(!matched.length&&!exact)continue;
+  const stem=x.stem;const idMatch=x.it.type==="QUESTION"&&x.id===query;const exact=x.it.type==="QUESTION"&&stem.length>0&&(query===stem||query===normalize([x.it.obj.stem,...Object.values(x.it.obj.options||{})].join(" ")));
+  if(!matched.length&&!exact&&!idMatch)continue;
   if(x.it.type==="QUESTION"){score+=12;const norm=s=>String(s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();const stem=norm(x.it.obj?.stem),q=norm(lastText);if(exact)score+=100000;else if(q&&stem.includes(q))score+=100;}
   if(["DEADLINE","PROCEDURE"].includes(x.it.type))score*=1.12;
   if(String(x.it.title).toLowerCase().includes(lastText.toLowerCase()))score+=6;
   score*=1+.06*Math.max(0,matched.length-1);
-  out.push({...x.it,score,matched,exact});
+  out.push({...x.it,score,matched,exact,idMatch});
  }
- return out.sort((a,b)=>b.score-a.score);
+ return out.sort((a,b)=>Number(b.idMatch)-Number(a.idMatch)||Number(b.exact)-Number(a.exact)||b.score-a.score);
 }
 function show(){
  const box=document.getElementById("findResults");if(!box)return;
@@ -52,7 +53,7 @@ function show(){
   }).slice(0,5);
   if(a.length)tools='<h2 class="sectionTitle">Matching calculators</h2><div class="toolLaunchGrid">'+a.map(c=>'<button class="toolLaunch" data-find-calc="'+E(c.id)+'"><strong>'+E(c.title)+'</strong><small>'+E(c.what).slice(0,180)+'</small></button>').join("")+'</div>';
  }
- const category=x=>x.type==="QUESTION"&&String(x.obj?.answer_status||"").toUpperCase()==="EXCLUDED"?"Excluded — not practice":x.exact?"Exact Question Matches":x.type==="QUESTION"?(/sample/i.test([x.obj?.category,x.obj?.sitting,x.obj?.label,x.obj?.source].join(" "))?"SILE Sample Questions":"Past-Year Questions"):x.type==="LESSON"?"Learning Materials":"Legal References";
+ const category=x=>x.type==="QUESTION"&&String(x.obj?.answer_status||"").toUpperCase()==="EXCLUDED"?"Excluded — not practice":(x.exact||x.idMatch)?"Exact Question Matches":x.type==="QUESTION"?(/sample/i.test([x.obj?.category,x.obj?.sitting,x.obj?.label,x.obj?.source].join(" "))?"SILE Sample Questions":"Past-Year Questions"):x.type==="LESSON"?"Learning Materials":"Legal References";
  box.innerHTML='<div class="listHeader"><h2>Search results</h2><div class="listCount">'+hits.length+' matches</div></div>'+["Exact Question Matches","Past-Year Questions","SILE Sample Questions","Learning Materials","Legal References","Excluded — not practice"].map(g=>{
  const rows=hits.map((x,i)=>({x,i})).filter(({x})=>category(x)===g);
  return '<section class="readSection"><h2>'+E(g)+' ('+rows.length+')</h2>'+rows.map(({x,i})=>'<button class="contentRow" data-find-index="'+i+'"><div class="rowTop"><span class="rowType">'+E(x.type)+'</span><span class="rowMeta">'+E(x.subject)+'</span></div><div class="rowTitle">'+E(x.title)+'</div><div class="rowExcerpt">'+E(x.type==="QUESTION"?x.obj.stem:x.text).slice(0,350)+'</div><div class="sourceMeta">'+E(x.obj?.sitting||"")+' '+E(x.obj?.answer_status||"")+'</div></button>').join("")+'</section>';
