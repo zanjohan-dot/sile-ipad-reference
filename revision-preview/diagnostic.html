@@ -16,7 +16,7 @@ button:active{background:#0c4064}#touchStatus{font-weight:700;min-height:28px}pr
 </style>
 </head>
 <body>
-<header><h1>SILE 2026 - iPad Diagnostics</h1><div>Safe, read-only checks - offline build 22</div></header>
+<header><h1>SILE 2026 - iPad Diagnostics</h1><div>Safe, read-only checks - offline build 23</div></header>
 <main>
 <div class="card">
 <h2>1. Touch response</h2>
@@ -75,15 +75,15 @@ async function checkData(){
 }
 async function checkShell(){
  if(!("caches" in window))return "Cache storage unavailable";
- const names=(await timed(caches.keys(),"Cache check")).filter(name=>/^sile-revision-preview-shell-v22$/.test(name));
- const app=new URL("app.js?v=22",location.href).href;
- if(!names.length)return "Build 22 shell is not installed";
+ const names=(await timed(caches.keys(),"Cache check")).filter(name=>/^sile-revision-preview-shell-v23$/.test(name));
+ const app=new URL("app.js?v=23",location.href).href;
+ if(!names.length)return "Build 23 shell is not installed";
  const shell=await caches.open(names[0]);
- return (await shell.match(app))?"Build 22 cached.":"Build 22 is missing its app script.";
+ return (await shell.match(app))?"Build 23 cached.":"Build 23 is missing its app script.";
 }
 async function run(){
  $("report").textContent="Running checks...";
- const lines=["SILE iPad diagnostic - 22","URL: "+location.origin+location.pathname,"Browser: "+navigator.userAgent,"Touch button: "+taps+" tap(s)"];
+ const lines=["SILE iPad diagnostic - 23","URL: "+location.origin+location.pathname,"Browser: "+navigator.userAgent,"Touch button: "+taps+" tap(s)"];
  lines.push("Secure context: "+(window.isSecureContext?"yes":"no"));
  lines.push("Service worker support: "+("serviceWorker" in navigator?"yes":"no"));
  if("serviceWorker" in navigator){

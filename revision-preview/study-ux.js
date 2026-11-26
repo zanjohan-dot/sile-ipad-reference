@@ -84,6 +84,7 @@ function questionAttemptUI(q,attempt){
 }
 function interpretation(q,selected){
  const status=(q.answer_status||"").toUpperCase();
+ if(status==="PRACTICE")return !selected?"Practice key shown.":selected===q.answer?"Correct for this original practice question.":"Review how the original practice key applies to the facts.";
  if(status.includes("UNRESOLVED"))return "Unresolved question — not scored. Review the source conflict and legal reasoning.";
  if(!selected)return "Explanation revealed without recording an attempt.";
  if(status==="OFFICIAL"){if(Object.keys(q.options||{}).length!==4)return "Option list requires source review. Not scored.";return selected===q.answer?"Matches the recorded official key.":"Does not match the recorded official key. Review why.";}
