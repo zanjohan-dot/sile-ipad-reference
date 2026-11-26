@@ -8,7 +8,7 @@ const tokens=s=>String(s||"").toLowerCase().match(/[a-z0-9]+(?:\.[0-9]+)?/g)?.fi
 let lastText="",lastMatches=[],lastSubjectScope=false,lastAll=true;
 
 const HISTORY_KEY="sile_search_history_v1";
-let inputTimer=null,visibleLimit=25,returnToQuestion=null;
+let inputTimer=null,visibleLimit=25,returnToQuestion=null,answerPaneOpen=false;
 function history(){
  try{
   const stored=JSON.parse(localStorage.getItem(HISTORY_KEY)||"[]");
@@ -41,10 +41,11 @@ function showHistory(){
  });
  document.getElementById("clearFindHistory").onclick=()=>{saveHistory([]);showHistory();};
 }
-function open(it,resultIndex){
+function open(it,resultIndex,focusSelector){
  remember();
  const context={paper,subject};
  const searchState={lastText,lastAll,lastSubjectScope,similarSource,visibleLimit,returnToQuestion};
+ const reopenAnswerPane=answerPaneOpen;
  const scroll=document.getElementById("screen").scrollTop;
  subject=it.code;paper=it.paper;
  function sync(){
@@ -71,7 +72,8 @@ function open(it,resultIndex){
    ({lastText,lastAll,lastSubjectScope,similarSource,visibleLimit,returnToQuestion}=searchState);
    sync();
    render(true);
-   document.querySelector('[data-find-index="'+resultIndex+'"]')?.focus({preventScroll:true});
+   if(reopenAnswerPane)showRecordedAnswer(false);
+   document.querySelector(focusSelector||'[data-find-index="'+resultIndex+'"]')?.focus({preventScroll:true});
    document.getElementById("screen").scrollTop=scroll;
   };
  }
@@ -123,6 +125,69 @@ function sessionKey(s){
  return year&&number?year+"-"+number:"";
 }
 
+const studyAliases=normalizedAliases.concat([
+ ["arrest procedure","stop a vessel from leaving","keep a ship in port","ship arrest"],
+ ["scheme of arrangement","restructuring plan","plan with its creditors","negotiate with creditors"],
+ ["trade mark","trademark","brand logo"],
+ ["stamp duty","transfer of property"]
+].map(group=>group.map(normalize)));
+// Fit a TF-IDF classifier to labelled course topics in the locally imported bank.
+function studyFeatures(value){
+ const query=normalize(value);
+ const features=contentTokens(query);
+ for(const group of studyAliases){
+  if(group.some(phrase=>containsPhrase(query,phrase)))for(const word of contentTokens(group[0]))features.add(word);
+ }
+ return new Set([...features].filter(word=>word.length>=3&&/[a-z]/.test(word)).map(word=>
+  word.length>5?word.replace(/ies$/,"y").replace(/(?:ing|ed|s)$/,""):word));
+}
+function fitStudyTopics(items){
+ const topics=new Map();
+ for(const item of items){
+  const key=item.type==="LESSON"?item.topicId:item.type==="QUESTION"?item.obj.topic:null;
+  if(!key||excluded(item))continue;
+  if(!topics.has(key))topics.set(key,{key,counts:new Map(),examples:[],paper:item.paper,code:item.code});
+  const row=topics.get(key);
+  let features;
+  if(item.type==="LESSON"){
+   row.lesson=item;
+   row.labelFeatures=studyFeatures(item.title);
+   features=studyFeatures(item.title+" "+item.text);
+  }else{
+   const q=item.obj;
+   features=studyFeatures([q.stem,q.tested_rule,q.really_testing,q.subtopic,text(q.keywords)].filter(Boolean).join(" "));
+   row.examples.push({item,features});
+  }
+  for(const term of features)row.counts.set(term,(row.counts.get(term)||0)+1);
+ }
+ const frequency=new Map();
+ for(const row of topics.values())for(const token of row.counts.keys())frequency.set(token,(frequency.get(token)||0)+1);
+ const idf=new Map([...frequency].map(([token,count])=>[token,Math.log(1+topics.size/(1+count))]));
+ for(const row of topics.values()){
+  const weights=new Map([...row.counts].map(([token,count])=>[token,idf.get(token)*Math.log1p(count)]));
+  const norm=Math.hypot(...weights.values())||1;
+  row.vector=new Map([...weights].map(([token,value])=>[token,value/norm]));
+ }
+ return {topics:[...topics.values()],idf};
+}
+function classifyStudyQuery(query,model){
+ const features=studyFeatures(query), terms=[...features].filter(term=>model.idf.has(term));
+ if(!terms.length||terms.length/Math.max(1,features.size)<.42)return [];
+ return model.topics.filter(row=>(lastAll||row.paper===paper)&&(!lastSubjectScope||!subject||row.code===subject))
+  .map(row=>{
+   const matched=terms.filter(term=>row.vector.has(term));
+   const strength=matched.reduce((sum,term)=>sum+row.vector.get(term)*model.idf.get(term),0);
+   const labelMatch=matched.filter(term=>row.labelFeatures?.has(term));
+   const labelBonus=labelMatch.length>=2?.08:0;
+   return {row,matched,score:strength/(Math.hypot(...terms.map(term=>model.idf.get(term)))||1)+labelBonus};
+  }).filter(hit=>hit.score>=.09&&(hit.matched.length>=2||terms.length===1&&model.idf.get(terms[0])>=3))
+  .sort((a,b)=>b.score-a.score).slice(0,3).map(({row,matched})=>{
+   const examples=row.examples.map(({item,features})=>({item,score:matched.reduce((sum,term)=>sum+(features.has(term)?model.idf.get(term):0),0)}))
+    .sort((a,b)=>b.score-a.score);
+   return {title:row.lesson?.title||row.examples[0]?.item.obj.subtopic||row.key,lesson:row.lesson,
+    question:examples[0]?.item,subject:row.lesson?.subject||examples[0]?.item.subject};
+  });
+}
 function makeIndex(items){
  const docs=[],postings=new Map(),ids=new Map(),sessions=new Map(),stems=new Map(),optionLookup=new Map();
  const lessons=new Map(items.filter(it=>it.type==="LESSON").map(it=>[it.topicId,it.title]));
@@ -166,7 +231,7 @@ function makeIndex(items){
    postings.get(word).push({doc,weight});
   }
  }
- return {docs,postings,ids,sessions,stems,optionLookup,subjects,codes,lessonDocs,spelling:new Map()};
+ return {docs,postings,ids,sessions,stems,optionLookup,subjects,codes,lessonDocs,spelling:new Map(),studyTopics:null};
 }
 
 function getIndex(){
@@ -348,6 +413,8 @@ function evidence(){
 function show(){
  const box=document.getElementById("findResults");
  if(!box)return;
+ document.getElementById("recordedAnswer").replaceChildren();
+ answerPaneOpen=false;
  lastMatches=evidence();
  if(!lastText.trim()){
   box.innerHTML='<div class="emptyHint">Search by question text, answer choice, question ID, legal term or citation.</div>';
@@ -387,6 +454,49 @@ function show(){
  const more=document.getElementById("showMoreMatches");
  if(more)more.onclick=()=>{visibleLimit+=25;show();};
 }
+function showStudyMatches(box){
+ const idx=getIndex();
+ idx.studyTopics??=fitStudyTopics(flat);
+ const related=classifyStudyQuery(lastText,idx.studyTopics);
+ if(!related.length){
+  box.textContent="No confident study-topic match. Try a question ID, exact wording or a more specific legal term.";
+  return;
+ }
+ box.innerHTML='<section class="readSection"><h2>Likely study topics</h2><p>Matched offline against your study materials. Open a source to check its wording and answer status.</p>'+
+  related.map((hit,i)=>'<div class="readSection"><h3>'+E(hit.title)+'</h3><div class="sourceMeta">'+E(hit.subject)+'</div>'+
+   '<div class="studyActions">'+(hit.lesson?'<button class="secondaryButton" data-study-lesson="'+i+'">Read lesson</button>':'')+
+   (hit.question?'<button class="secondaryButton" data-study-question="'+i+'">Open '+E(hit.question.obj.id)+'</button>':'')+'</div></div>').join("")+'</section>';
+ box.querySelectorAll("[data-study-lesson],[data-study-question]").forEach(button=>{
+  button.onclick=()=>{
+   const hit=related[Number(button.dataset.studyLesson??button.dataset.studyQuestion)];
+   const type=button.dataset.studyLesson===undefined?"question":"lesson";
+   const selector='[data-study-'+type+'="'+(button.dataset.studyLesson??button.dataset.studyQuestion)+'"]';
+   open(hit[type],undefined,selector);
+  };
+ });
+}
+function showRecordedAnswer(submit=true){
+ if(submit)submitSearch();
+ answerPaneOpen=true;
+ const box=document.getElementById("recordedAnswer");
+ if(!lastText.trim()){box.textContent="Enter a question ID, question text or topic first.";return;}
+ const exact=lastMatches.filter(it=>it.type==="QUESTION"&&(it.idMatch||it.exact));
+ if(!exact.length){showStudyMatches(box);return;}
+ if(exact.length>1){
+  box.textContent="Several records match this wording. Use the question ID or choose a result.";
+  return;
+ }
+ const [item]=exact, q=item.obj;
+ const status=String(q.answer_status||"").toUpperCase();
+ const hasKey=(status==="OFFICIAL"||status==="DERIVED")&&q.answer;
+ const label=status==="OFFICIAL"?"Official SILE answer":status==="DERIVED"?"Derived answer · subject to audit":status==="EXCLUDED"?"Excluded from practice":"Unresolved · unscored";
+ const key=hasKey?q.answer:"No settled answer recorded";
+ const option=hasKey?q.options?.[key]:"";
+ box.innerHTML='<section class="readSection questionKey"><h2>Recorded answer · '+E(q.id)+'</h2>'+
+  '<p>'+E(key)+'</p>'+(option?'<div>'+E(option)+'</div>':'')+'<div class="sourceMeta">'+E(label)+'</div>'+
+  '<div class="studyActions"><button class="secondaryButton" id="openRecordedAnswer">Open source question</button></div></section>';
+ document.getElementById("openRecordedAnswer").onclick=()=>open(item,lastMatches.indexOf(item),"#openRecordedAnswer");
+}
 function submitSearch(){
  clearTimeout(inputTimer);
  visibleLimit=25;
@@ -406,7 +516,7 @@ function render(preserve=false){
   visibleLimit=25;
  }
  const rev=mode==="learn";
- setScreen('<div class="findPage"><h1 class="pageTitle">'+(similarSource?'Similar questions':'Search')+'</h1>'+(returnToQuestion?'<button id="returnToQuestion" class="backButton">← Back to question</button>':'')+'<div class="searchPanel"><label class="findLabel" for="findQuery">Question, key facts or legal issue</label><textarea id="findQuery" rows="3" placeholder="e.g. Dec 2025 Q18, BF-D25-01 or ship arrest"></textarea><div class="findControls"><label><input id="findSubjectOnly" type="checkbox" '+(lastSubjectScope?"checked":"")+(subject?"":" disabled")+'> This subject only</label><label><input id="findAllPapers" type="checkbox" '+(lastAll?"checked":"")+'> Include both papers</label><button id="findNow" class="primaryButton">Search</button></div></div><div id="findResults" class="searchResults" aria-live="polite"></div><div id="findHistory"></div>'+(rev?'<div id="modelPanel" class="localSearchSetup"></div>':'')+'</div>');
+ setScreen('<div class="findPage"><h1 class="pageTitle">'+(similarSource?'Similar questions':'Search')+'</h1>'+(returnToQuestion?'<button id="returnToQuestion" class="backButton">← Back to question</button>':'')+'<div class="searchPanel"><label class="findLabel" for="findQuery">Question, key facts or legal issue</label><textarea id="findQuery" rows="3" placeholder="e.g. Dec 2025 Q18, BF-D25-01 or ship arrest"></textarea><div class="findControls"><label><input id="findSubjectOnly" type="checkbox" '+(lastSubjectScope?"checked":"")+(subject?"":" disabled")+'> This subject only</label><label><input id="findAllPapers" type="checkbox" '+(lastAll?"checked":"")+'> Include both papers</label><button id="findNow" class="primaryButton">Search</button><button id="findRecordedAnswer" class="secondaryButton">Find answers offline</button></div></div><div id="recordedAnswer" aria-live="polite"></div>'+(rev?'<div id="modelPanel" class="localSearchSetup"></div>':'')+'<div id="findResults" class="searchResults" aria-live="polite"></div><div id="findHistory"></div></div>');
  const backToQuestion=document.getElementById("returnToQuestion");
  if(backToQuestion)backToQuestion.onclick=returnToQuestion;
  const input=document.getElementById("findQuery");
@@ -423,6 +533,7 @@ function render(preserve=false){
   if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();submitSearch();}
  };
  document.getElementById("findNow").onclick=submitSearch;
+ document.getElementById("findRecordedAnswer").onclick=()=>showRecordedAnswer();
  document.getElementById("findSubjectOnly").onchange=e=>{lastSubjectScope=e.target.checked;visibleLimit=25;show();};
  document.getElementById("findAllPapers").onchange=e=>{lastAll=e.target.checked;visibleLimit=25;show();};
  if(rev&&window.SILELOCALMODEL)window.SILELOCALMODEL.panel();
@@ -454,6 +565,7 @@ window.SILEFIND={
   visibleLimit=25;
   render(true);
  },
+ showRecordedAnswer,
  refreshEvidence:q=>{
   if(typeof q==="string"&&q!==lastText){
    lastText=q;

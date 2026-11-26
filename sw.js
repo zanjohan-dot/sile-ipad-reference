@@ -1,9 +1,9 @@
 /* SILE app shell. Preserve unrelated caches, including private WebLLM model weights. */
-const CACHE="sile-study-v19";
+const CACHE="sile-study-v21";
 const RUNTIME_CACHE="sile-local-runtime-v1";
 const ASSETS=[
- "./","./index.html","./styles.css?v=19","./app.js?v=19","./study-ux.js?v=19","./tools-enhancements.js?v=19",
- "./retrieval-enhancements.js?v=19","./local-model.js?v=19","./diagnostic.html","./manifest.webmanifest",
+ "./","./index.html","./styles.css?v=21","./app.js?v=21","./study-ux.js?v=21","./tools-enhancements.js?v=21",
+ "./retrieval-enhancements.js?v=21","./local-model.js?v=21","./diagnostic.html","./manifest.webmanifest",
  "./icon-192.png","./icon-512.png","./apple-touch-icon.png"
 ];
 const scope=new URL(self.registration.scope);
