@@ -11,6 +11,7 @@ const shellAssets=new Set(ASSETS.map(path=>new URL(path,scope).href));
 const OWNED_CACHE=/^(?:sile-study-v|sile-stage3-v|sile-shell-v)/;
 self.addEventListener("install",event=>event.waitUntil(
  caches.open(CACHE).then(cache=>cache.addAll(ASSETS.map(path=>new Request(new URL(path,scope),{cache:"reload"}))))
+  .then(()=>self.skipWaiting())
 ));
 self.addEventListener("activate",event=>event.waitUntil(
  caches.keys().then(keys=>Promise.all(keys.filter(k=>OWNED_CACHE.test(k)&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())
