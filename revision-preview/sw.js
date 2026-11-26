@@ -1,9 +1,9 @@
 /* SILE app shell. Preserve unrelated caches, including private WebLLM model weights. */
-const CACHE="sile-revision-preview-shell-v20";
+const CACHE="sile-revision-preview-shell-v21";
 const RUNTIME_CACHE="sile-revision-preview-runtime-v1";
 const ASSETS=[
- "./","./index.html","./reader.html","./styles.css?v=19","./app.js?v=19","./study-ux.js?v=19","./tools-enhancements.js?v=19",
- "./retrieval-enhancements.js?v=19","./local-model.js?v=19","./diagnostic.html","./manifest.webmanifest",
+ "./","./index.html","./reader.html","./offline-study.html","./styles.css?v=21","./app.js?v=21","./study-ux.js?v=21","./tools-enhancements.js?v=21",
+ "./retrieval-enhancements.js?v=21","./local-model.js?v=21","./diagnostic.html","./manifest.webmanifest",
  "./icon-192.png","./icon-512.png","./apple-touch-icon.png"
 ];
 const scope=new URL(self.registration.scope);
@@ -38,7 +38,7 @@ self.addEventListener("fetch",event=>{
  if(event.request.method!=="GET")return;
  const url=new URL(event.request.url);
  const navigation=event.request.mode==="navigate"&&url.origin===scope.origin&&
-  [scope.pathname,new URL("index.html",scope).pathname,new URL("reader.html",scope).pathname].includes(url.pathname);
+  [scope.pathname,new URL("index.html",scope).pathname,new URL("reader.html",scope).pathname,new URL("offline-study.html",scope).pathname].includes(url.pathname);
  if(navigation||shellAssets.has(url.href)){event.respondWith(appRequest(event.request,navigation));return;}
  if(RUNTIME_HOSTS.has(url.hostname)&&event.request.destination==="script"){event.respondWith(runtimeRequest(event.request));}
 });
