@@ -440,6 +440,16 @@ function renderTools(){
  $$('[data-select-tools]').forEach(b=>b.onclick=()=>{subject=b.dataset.selectTools;activeTab='tools';renderSubjects();updateContext();renderSubjectDashboard()});
 }
 
+async function checkOfflineSetup(){
+ const output=$('#offlineSetupStatus');
+ const script=[...document.scripts].find(node=>node.src&&new URL(node.src).pathname.endsWith('/app.js'));
+ try{
+  const shell=!!navigator.serviceWorker?.controller&&!!script&&!!await window.caches?.match(script.src);
+  const tools=!!await dbGet('sile_private_tools_2026_11_08');
+  output.textContent=(shell?'App shell cached. ':'App shell is still preparing. Keep the preview open while connected and check again. ')+
+   questionCount()+' questions stored. '+(tools?'Private tools stored.':'Private tools can be imported from a local file.');
+ }catch(error){output.textContent='Could not check local storage: '+error.message;}
+}
 function renderData(){
  const topics=Object.values(studyProgress.topics||{}),questions=Object.values(studyProgress.questions||{});
  const known=topics.filter(x=>x.state==="understood").length,needs=topics.filter(x=>x.state==="needs-review").length;
@@ -453,7 +463,10 @@ function renderData(){
  '<label class="calcField"><span>Restore revision progress from backup</span><input id="progressImport" type="file" accept=".json,application/json"></label>'+
  '<div class="dataNote"><strong>Legal-content release warning:</strong> The imported 8 November dataset predates the final Taxation Contact Session and later answer-status audits. Do not mistake local availability for legal-content certification.</div>'+
  '<div class="dataNote"><strong>Exam rules:</strong> The SILE examination brief prohibits AI-powered search engines and answer-generating applications during the examinations. This app is a revision system; any exam use requires checking the permitted reference-material rules.</div>'+
- '<p class="readerMeta">The Search page can install an optional on-device explanation model for revision. Its offline relaunch has not been verified on this iPad. Semantic-embedding retrieval is not installed.</p></div>');
+ '<div class="dataActions"><button id="checkOfflineSetup" class="secondaryButton">Check offline setup</button></div>'+
+ '<p id="offlineSetupStatus" role="status"></p>'+
+ '<p class="readerMeta">Search, topic matching and the question reader use the study bank on this device.</p></div>');
+ $('#checkOfflineSetup').onclick=checkOfflineSetup;
  $('#replaceData').onclick=()=>$('#fileInput').click();
  $('#backupData').onclick=backup;$('#exportProgress').onclick=exportStudyProgress;
  $('#progressImport').onchange=async e=>{
@@ -568,7 +581,7 @@ async function init(){
     const msg = esc(window.SILE_APP_ERROR);
     setScreen('<div class="dataPanel"><div class="eyebrow">Startup diagnostic</div><h1 class="pageTitle">Unable to start the study interface</h1>' +
       '<p>The local study data and progress have not been deleted. Error: <strong>' + msg + '</strong></p>' +
-      '<p>Connect to Wi-Fi, then open <a href="diagnostic.html">SILE Diagnostics</a> to check the app. Do not delete the Home Screen app or clear website data.</p></div>');
+      '<p>Open <a href="diagnostic.html">SILE Diagnostics</a> to check the app. Do not delete the Home Screen app or clear website data.</p></div>');
   } finally {
     if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).catch(err => console.error('SILE service worker', err));
   }

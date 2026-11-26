@@ -16,7 +16,7 @@ button:active{background:#0c4064}#touchStatus{font-weight:700;min-height:28px}pr
 </style>
 </head>
 <body>
-<header><h1>SILE 2026 - iPad Diagnostics</h1><div>Safe, read-only checks - build 2026-11-23B</div></header>
+<header><h1>SILE 2026 - iPad Diagnostics</h1><div>Safe, read-only checks - offline build 22</div></header>
 <main>
 <div class="card">
 <h2>1. Touch response</h2>
@@ -73,19 +73,17 @@ async function checkData(){
   };
  });
 }
-async function checkFile(path){
- try{
-  const r=await timed(fetch("./"+path+"?diag="+Date.now(),{cache:"no-store"}),"File request");
-  if(!r.ok)return "HTTP "+r.status;
-  const t=await timed(r.text(),"File response");
-  if(path==="app.js") return "HTTP 200; "+t.length+" chars; new startup: "+(t.includes("window.SILE_APP_READY = true")?"yes":"NO");
-  if(path==="sw.js") return "HTTP 200; "+(t.match(/sile-study-v[0-9]+/)||["unknown"])[0];
-  return "HTTP 200; "+t.length+" chars";
- }catch(e){return "ERROR "+e.name+": "+e.message}
+async function checkShell(){
+ if(!("caches" in window))return "Cache storage unavailable";
+ const names=(await timed(caches.keys(),"Cache check")).filter(name=>/^sile-study-v22$/.test(name));
+ const app=new URL("app.js?v=22",location.href).href;
+ if(!names.length)return "Build 22 shell is not installed";
+ const shell=await caches.open(names[0]);
+ return (await shell.match(app))?"Build 22 cached.":"Build 22 is missing its app script.";
 }
 async function run(){
  $("report").textContent="Running checks...";
- const lines=["SILE iPad diagnostic - 2026-11-23B","URL: "+location.origin+location.pathname,"Browser: "+navigator.userAgent,"Touch button: "+taps+" tap(s)"];
+ const lines=["SILE iPad diagnostic - 22","URL: "+location.origin+location.pathname,"Browser: "+navigator.userAgent,"Touch button: "+taps+" tap(s)"];
  lines.push("Secure context: "+(window.isSecureContext?"yes":"no"));
  lines.push("Service worker support: "+("serviceWorker" in navigator?"yes":"no"));
  if("serviceWorker" in navigator){
@@ -100,8 +98,7 @@ async function run(){
   catch(e){lines.push("Cache inspection: "+e.message)}
  }
  lines.push("Offline storage: "+await checkData());
- lines.push("App JS: "+await checkFile("app.js"));
- lines.push("Service worker JS: "+await checkFile("sw.js"));
+ lines.push("Offline shell: "+await checkShell());
  lines.push("Saved startup error: "+(sessionStorage.getItem("sile_last_startup_error")||"none recorded"));
  lastReport=lines.join("\n");
  $("report").textContent=lastReport;

@@ -8,7 +8,7 @@ const tokens=s=>String(s||"").toLowerCase().match(/[a-z0-9]+(?:\.[0-9]+)?/g)?.fi
 let lastText="",lastMatches=[],lastSubjectScope=false,lastAll=true;
 
 const HISTORY_KEY="sile_search_history_v1";
-let inputTimer=null,visibleLimit=25,returnToQuestion=null,answerPaneOpen=false;
+let inputTimer=null,visibleLimit=25,returnToQuestion=null;
 function history(){
  try{
   const stored=JSON.parse(localStorage.getItem(HISTORY_KEY)||"[]");
@@ -45,7 +45,6 @@ function open(it,resultIndex,focusSelector){
  remember();
  const context={paper,subject};
  const searchState={lastText,lastAll,lastSubjectScope,similarSource,visibleLimit,returnToQuestion};
- const reopenAnswerPane=answerPaneOpen;
  const scroll=document.getElementById("screen").scrollTop;
  subject=it.code;paper=it.paper;
  function sync(){
@@ -72,7 +71,6 @@ function open(it,resultIndex,focusSelector){
    ({lastText,lastAll,lastSubjectScope,similarSource,visibleLimit,returnToQuestion}=searchState);
    sync();
    render(true);
-   if(reopenAnswerPane)showRecordedAnswer(false);
    document.querySelector(focusSelector||'[data-find-index="'+resultIndex+'"]')?.focus({preventScroll:true});
    document.getElementById("screen").scrollTop=scroll;
   };
@@ -413,15 +411,16 @@ function evidence(){
 function show(){
  const box=document.getElementById("findResults");
  if(!box)return;
- document.getElementById("recordedAnswer").replaceChildren();
- answerPaneOpen=false;
+ const answer=document.getElementById("recordedAnswer");
+ answer.replaceChildren();
  lastMatches=evidence();
  if(!lastText.trim()){
   box.innerHTML='<div class="emptyHint">Search by question text, answer choice, question ID, legal term or citation.</div>';
   return;
  }
+ const hasAnswer=!similarSource&&showRecordedAnswer(answer);
  if(!lastMatches.length){
-  box.innerHTML='<div class="emptyHint">'+(similarSource?"No related questions found.":"No local matches. Try a distinctive phrase or question ID and check the paper filters.")+'</div>';
+  box.innerHTML=hasAnswer?"":'<div class="emptyHint">'+(similarSource?"No related questions found.":"No local matches. Try a distinctive phrase or question ID and check the paper filters.")+'</div>';
   return;
  }
  const groups=["Exact Question Matches","Similar Past-Year Questions","SILE Sample Questions","Learning Materials","Legal References","Excluded Questions"];
@@ -459,10 +458,9 @@ function showStudyMatches(box){
  idx.studyTopics??=fitStudyTopics(flat);
  const related=classifyStudyQuery(lastText,idx.studyTopics);
  if(!related.length){
-  box.textContent="No confident study-topic match. Try a question ID, exact wording or a more specific legal term.";
-  return;
+  return false;
  }
- box.innerHTML='<section class="readSection"><h2>Likely study topics</h2><p>Matched offline against your study materials. Open a source to check its wording and answer status.</p>'+
+ box.innerHTML='<section class="readSection"><h2>Likely study topics</h2><p>Matched against your study materials. Open a source to check its wording and answer status.</p>'+
   related.map((hit,i)=>'<div class="readSection"><h3>'+E(hit.title)+'</h3><div class="sourceMeta">'+E(hit.subject)+'</div>'+
    '<div class="studyActions">'+(hit.lesson?'<button class="secondaryButton" data-study-lesson="'+i+'">Read lesson</button>':'')+
    (hit.question?'<button class="secondaryButton" data-study-question="'+i+'">Open '+E(hit.question.obj.id)+'</button>':'')+'</div></div>').join("")+'</section>';
@@ -474,17 +472,14 @@ function showStudyMatches(box){
    open(hit[type],undefined,selector);
   };
  });
+ return true;
 }
-function showRecordedAnswer(submit=true){
- if(submit)submitSearch();
- answerPaneOpen=true;
- const box=document.getElementById("recordedAnswer");
- if(!lastText.trim()){box.textContent="Enter a question ID, question text or topic first.";return;}
+function showRecordedAnswer(box){
  const exact=lastMatches.filter(it=>it.type==="QUESTION"&&(it.idMatch||it.exact));
- if(!exact.length){showStudyMatches(box);return;}
+ if(!exact.length)return showStudyMatches(box);
  if(exact.length>1){
   box.textContent="Several records match this wording. Use the question ID or choose a result.";
-  return;
+  return true;
  }
  const [item]=exact, q=item.obj;
  const status=String(q.answer_status||"").toUpperCase();
@@ -492,10 +487,12 @@ function showRecordedAnswer(submit=true){
  const label=status==="OFFICIAL"?"Official SILE answer":status==="DERIVED"?"Derived answer · subject to audit":status==="EXCLUDED"?"Excluded from practice":"Unresolved · unscored";
  const key=hasKey?q.answer:"No settled answer recorded";
  const option=hasKey?q.options?.[key]:"";
+ const details='<p>'+E(key)+'</p>'+(option?'<div>'+E(option)+'</div>':'')+'<div class="sourceMeta">'+E(label)+'</div>';
  box.innerHTML='<section class="readSection questionKey"><h2>Recorded answer · '+E(q.id)+'</h2>'+
-  '<p>'+E(key)+'</p>'+(option?'<div>'+E(option)+'</div>':'')+'<div class="sourceMeta">'+E(label)+'</div>'+
+  (mode==="learn"&&hasKey?'<details><summary>Show recorded answer</summary>'+details+'</details>':details)+
   '<div class="studyActions"><button class="secondaryButton" id="openRecordedAnswer">Open source question</button></div></section>';
  document.getElementById("openRecordedAnswer").onclick=()=>open(item,lastMatches.indexOf(item),"#openRecordedAnswer");
+ return true;
 }
 function submitSearch(){
  clearTimeout(inputTimer);
@@ -515,8 +512,7 @@ function render(preserve=false){
   returnToQuestion=null;
   visibleLimit=25;
  }
- const rev=mode==="learn";
- setScreen('<div class="findPage"><h1 class="pageTitle">'+(similarSource?'Similar questions':'Search')+'</h1>'+(returnToQuestion?'<button id="returnToQuestion" class="backButton">← Back to question</button>':'')+'<div class="searchPanel"><label class="findLabel" for="findQuery">Question, key facts or legal issue</label><textarea id="findQuery" rows="3" placeholder="e.g. Dec 2025 Q18, BF-D25-01 or ship arrest"></textarea><div class="findControls"><label><input id="findSubjectOnly" type="checkbox" '+(lastSubjectScope?"checked":"")+(subject?"":" disabled")+'> This subject only</label><label><input id="findAllPapers" type="checkbox" '+(lastAll?"checked":"")+'> Include both papers</label><button id="findNow" class="primaryButton">Search</button><button id="findRecordedAnswer" class="secondaryButton">Find answers offline</button></div></div><div id="recordedAnswer" aria-live="polite"></div>'+(rev?'<div id="modelPanel" class="localSearchSetup"></div>':'')+'<div id="findResults" class="searchResults" aria-live="polite"></div><div id="findHistory"></div></div>');
+ setScreen('<div class="findPage"><h1 class="pageTitle">'+(similarSource?'Similar questions':'Search')+'</h1>'+(returnToQuestion?'<button id="returnToQuestion" class="backButton">← Back to question</button>':'')+'<div class="searchPanel"><label class="findLabel" for="findQuery">Question, key facts or legal issue</label><textarea id="findQuery" rows="3" placeholder="e.g. Dec 2025 Q18, BF-D25-01 or ship arrest"></textarea><div class="findControls"><label><input id="findSubjectOnly" type="checkbox" '+(lastSubjectScope?"checked":"")+(subject?"":" disabled")+'> This subject only</label><label><input id="findAllPapers" type="checkbox" '+(lastAll?"checked":"")+'> Include both papers</label><button id="findNow" class="primaryButton">Search</button></div></div><div id="recordedAnswer" aria-live="polite"></div><div id="findResults" class="searchResults" aria-live="polite"></div><div id="findHistory"></div></div>');
  const backToQuestion=document.getElementById("returnToQuestion");
  if(backToQuestion)backToQuestion.onclick=returnToQuestion;
  const input=document.getElementById("findQuery");
@@ -533,29 +529,13 @@ function render(preserve=false){
   if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();submitSearch();}
  };
  document.getElementById("findNow").onclick=submitSearch;
- document.getElementById("findRecordedAnswer").onclick=()=>showRecordedAnswer();
  document.getElementById("findSubjectOnly").onchange=e=>{lastSubjectScope=e.target.checked;visibleLimit=25;show();};
  document.getElementById("findAllPapers").onchange=e=>{lastAll=e.target.checked;visibleLimit=25;show();};
- if(rev&&window.SILELOCALMODEL)window.SILELOCALMODEL.panel();
  showHistory();
  show();
 }
-async function aiStatus(){
- document.body.classList.remove("focusMode");
- setScreen('<div class="dataPanel"><div class="eyebrow">Revision prototype · no model installed</div><h1 class="pageTitle">Offline AI readiness</h1><p>Safari 26 can support WebGPU, but this SILE app does not yet contain an installed or tested on-device language model. Verified calculators and the local reference finder do work without AI.</p><div class="dataActions"><button id="checkGpu" class="primaryButton">Check iPad capability</button><button id="findInstead" class="secondaryButton">Open reference finder</button></div><div id="gpuResult" class="readSection" aria-live="polite">Not checked</div><div class="dataNote">AI answer generation is disabled for examination use. A future revision-only model needs a downloaded model, grounded retrieval, privacy checks and a successful airplane-mode test.</div></div>');
- document.getElementById("findInstead").onclick=()=>render();
- document.getElementById("checkGpu").onclick=async()=>{
-  const box=document.getElementById("gpuResult");box.textContent="Checking WebGPU and local storage…";
-  try{
-   const gpu=!!navigator.gpu,adapter=gpu?await navigator.gpu.requestAdapter():null;
-   const store=await(navigator.storage?.estimate?navigator.storage.estimate():Promise.resolve({}));
-   const free=store.quota!=null&&store.usage!=null?((store.quota-store.usage)/1e9).toFixed(2)+" GB estimated free quota":"Unknown";
-   box.innerHTML="<h2>Device capability</h2><p>WebGPU API: "+(gpu?"Available":"Not available")+"<br>GPU adapter: "+(adapter?"Available":"Unavailable")+"<br>Estimated remaining storage quota: "+free+"<br>Local language model: <strong>NOT INSTALLED</strong><br>Offline AI generation: <strong>NOT VERIFIED</strong></p>";
-  }catch(e){box.textContent="Capability test failed: "+String(e)}
- };
-}
 window.SILEFIND={
- render,aiStatus,
+ render,
  findSimilar:(q,back)=>{
   returnToQuestion=back;
   similarSource=q;
@@ -564,17 +544,6 @@ window.SILEFIND={
   lastSubjectScope=false;
   visibleLimit=25;
   render(true);
- },
- showRecordedAnswer,
- refreshEvidence:q=>{
-  if(typeof q==="string"&&q!==lastText){
-   lastText=q;
-   similarSource=null;
-   const input=document.getElementById("findQuery");
-   if(input)input.value=q;
-  }
-  submitSearch();
-  return lastMatches;
  },
  get lastMatches(){return lastMatches;}
 };

@@ -15,7 +15,7 @@ h1{margin-top:0}button{font:inherit;background:#1769aa;color:white;border:0;bord
 <body>
 <div class="card">
 <h1>Refresh SILE 2026</h1>
-<p>This refreshes the app shell while preserving your imported dataset, revision progress, private calculator engine and downloaded local model caches. It does not erase the SILE data in IndexedDB.</p>
+<p>This refreshes the app shell while preserving your imported dataset, revision progress, private calculator engine. It does not erase the SILE data in IndexedDB.</p>
 <button id="reset">Refresh app shell only</button>
 <div id="status">Ready.</div>
 </div>
@@ -23,6 +23,9 @@ h1{margin-top:0}button{font:inherit;background:#1769aa;color:white;border:0;bord
 const s=document.getElementById("status");
 document.getElementById("reset").onclick=async()=>{
   try{
+    if(!navigator.onLine){s.textContent="Connect to the internet before refreshing the app shell.";return;}
+    const check=await fetch("sw.js",{cache:"no-store"});
+    if(!check.ok){s.textContent="The replacement shell is unavailable. Try again while connected.";return;}
     s.textContent="Removing old service worker and cached shell…";
     if("serviceWorker"in navigator){
       const regs=await navigator.serviceWorker.getRegistrations();

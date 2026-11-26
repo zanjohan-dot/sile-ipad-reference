@@ -1,9 +1,8 @@
-/* SILE app shell. Preserve unrelated caches, including private WebLLM model weights. */
-const CACHE="sile-study-v21";
-const RUNTIME_CACHE="sile-local-runtime-v1";
+/* Cache the full SILE shell. Updates only replace this app’s shell caches. */
+const CACHE="sile-study-v22";
 const ASSETS=[
- "./","./index.html","./styles.css?v=21","./app.js?v=21","./study-ux.js?v=21","./tools-enhancements.js?v=21",
- "./retrieval-enhancements.js?v=21","./local-model.js?v=21","./diagnostic.html","./manifest.webmanifest",
+ "./","./index.html","./styles.css?v=22","./app.js?v=22","./study-ux.js?v=22","./tools-enhancements.js?v=22",
+ "./retrieval-enhancements.js?v=22","./diagnostic.html","./reset.html","./manifest.webmanifest",
  "./icon-192.png","./icon-512.png","./apple-touch-icon.png"
 ];
 const scope=new URL(self.registration.scope);
@@ -21,24 +20,10 @@ async function appRequest(request,navigation){
  const cached=await cache.match(navigation?new URL("index.html",scope):request);
  return cached||fetch(request);
 }
-const RUNTIME_HOSTS=new Set(["esm.run","esm.sh","cdn.jsdelivr.net"]);
-function runtimeRequest(request){
- return caches.open(RUNTIME_CACHE).then(cache=>
-  fetch(request).then(response=>{
-   if(response.ok&&response.type!=="opaque"){
-    const copy=response.clone();
-    const len=Number(response.headers.get("content-length")||0);
-    if(!len||len<10000000)cache.put(request,copy).catch(()=>{});
-   }
-   return response;
-  }).catch(async()=>await cache.match(request)||Response.error())
- );
-}
 self.addEventListener("fetch",event=>{
  if(event.request.method!=="GET")return;
  const url=new URL(event.request.url);
  const navigation=event.request.mode==="navigate"&&url.origin===scope.origin&&
   [scope.pathname,new URL("index.html",scope).pathname].includes(url.pathname);
  if(navigation||shellAssets.has(url.href)){event.respondWith(appRequest(event.request,navigation));return;}
- if(RUNTIME_HOSTS.has(url.hostname)&&event.request.destination==="script"){event.respondWith(runtimeRequest(event.request));}
 });
