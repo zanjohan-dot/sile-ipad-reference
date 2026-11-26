@@ -74,12 +74,10 @@ function lesson(meta,source,related=[],progress={}){
 }
 function questionAttemptUI(q,attempt){
  const opts=Object.entries(q.options||{});
- const multi=/choose all|which of the following statements|are correct/i.test(q.stem||"")&&q.qtype==="multi"; // no assumption on selection method; answer options are A-D
  let html='<div class="optionList" role="group" aria-label="Select an answer">';
  for(const [k,v] of opts)html+='<label class="answerChoice"><input type="radio" name="practiceChoice" value="'+esc(k)+'">'+
  '<span class="answerLetter">'+esc(k)+'</span><span class="answerText">'+esc(v)+'</span></label>';
- html+='</div><div class="studyActions"><button type="button" class="primaryButton" id="submitPractice">Record attempt & reveal explanation</button>'+
- '<button type="button" class="secondaryButton" id="revealWithoutAttempt">Reveal without recording</button></div>'+
+ html+='</div><div class="studyActions"><button type="button" class="primaryButton" id="submitPractice">Record attempt and show answer</button></div>'+
  '<div id="practiceFeedback" role="status" aria-live="polite"></div>';
  if(attempt)html+='<div class="readerMeta">Previous attempts: '+Number(attempt.attempts||0)+'. Repeated practice is recorded locally on this iPad.</div>';
  return html;

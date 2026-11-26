@@ -1,19 +1,24 @@
 /* SILE app shell. Preserve unrelated caches, including private WebLLM model weights. */
-const CACHE="sile-study-v17";
+const CACHE="sile-study-v18";
 const RUNTIME_CACHE="sile-local-runtime-v1";
-const ASSETS=["./","./index.html","./styles.css","./app.js","./study-ux.js","./tools-enhancements.js","./retrieval-enhancements.js","./local-model.js","./diagnostic.html","./manifest.webmanifest","./icon-192.png","./icon-512.png","./apple-touch-icon.png"];
+const ASSETS=[
+ "./","./index.html","./styles.css?v=18","./app.js?v=18","./study-ux.js?v=18","./tools-enhancements.js?v=18",
+ "./retrieval-enhancements.js?v=18","./local-model.js?v=18","./diagnostic.html","./manifest.webmanifest",
+ "./icon-192.png","./icon-512.png","./apple-touch-icon.png"
+];
+const scope=new URL(self.registration.scope);
+const shellAssets=new Set(ASSETS.map(path=>new URL(path,scope).href));
 const OWNED_CACHE=/^(?:sile-study-v|sile-stage3-v|sile-shell-v)/;
 self.addEventListener("install",event=>event.waitUntil(
- caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting())
+ caches.open(CACHE).then(cache=>cache.addAll(ASSETS.map(path=>new Request(new URL(path,scope),{cache:"reload"}))))
 ));
 self.addEventListener("activate",event=>event.waitUntil(
  caches.keys().then(keys=>Promise.all(keys.filter(k=>OWNED_CACHE.test(k)&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())
 ));
-function appRequest(request){
- return fetch(request).then(response=>{
-  if(response.ok){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(request,copy)).catch(()=>{});}
-  return response;
- }).catch(async()=>await caches.match(request)||await caches.match("./index.html")||Response.error());
+async function appRequest(request,navigation){
+ const cache=await caches.open(CACHE);
+ const cached=await cache.match(navigation?new URL("index.html",scope):request);
+ return cached||fetch(request);
 }
 const RUNTIME_HOSTS=new Set(["esm.run","esm.sh","cdn.jsdelivr.net"]);
 function runtimeRequest(request){
@@ -31,6 +36,8 @@ function runtimeRequest(request){
 self.addEventListener("fetch",event=>{
  if(event.request.method!=="GET")return;
  const url=new URL(event.request.url);
- if(url.origin===self.location.origin){event.respondWith(appRequest(event.request));return;}
+ const navigation=event.request.mode==="navigate"&&url.origin===scope.origin&&
+  [scope.pathname,new URL("index.html",scope).pathname].includes(url.pathname);
+ if(navigation||shellAssets.has(url.href)){event.respondWith(appRequest(event.request,navigation));return;}
  if(RUNTIME_HOSTS.has(url.hostname)&&event.request.destination==="script"){event.respondWith(runtimeRequest(event.request));}
 });

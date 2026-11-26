@@ -7,11 +7,8 @@ let paper=1;
 let subject='';
 let mode='rapid';
 let activeTab='overview';
-let searchType='';
-let lastList=[];
 let previousView=null;
 let studyProgress={version:1,topics:{},questions:{}};
-let currentQuestion=null;
 let referenceCategory='RULE';
 
 const $=s=>document.querySelector(s);
@@ -21,7 +18,28 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 
 function openDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DBNAME,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(STORE))r.result.createObjectStore(STORE)};r.onsuccess=()=>{db=r.result;resolve()};r.onerror=()=>reject(r.error)})}
 function dbGet(k){return new Promise((resolve,reject)=>{const r=db.transaction(STORE).objectStore(STORE).get(k);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
-function dbPut(k,v){return new Promise((resolve,reject)=>{const r=db.transaction(STORE,'readwrite').objectStore(STORE).put(v,k);r.onsuccess=()=>resolve();r.onerror=()=>reject(r.error)})}
+function dbPut(k,v){return new Promise((resolve,reject)=>{
+ const tx=db.transaction(STORE,'readwrite');
+ tx.oncomplete=()=>resolve();
+ tx.onabort=()=>reject(tx.error||new Error('Local storage transaction aborted'));
+ tx.objectStore(STORE).put(v,k);
+})}
+function saveStudyProgress(field,id,update){
+ return new Promise((resolve,reject)=>{
+  const tx=db.transaction(STORE,'readwrite');
+  const store=tx.objectStore(STORE);
+  const request=store.get('study_progress_v1');
+  let next;
+  tx.oncomplete=()=>{studyProgress=next;resolve();};
+  tx.onabort=()=>reject(tx.error||new Error('Could not save revision progress'));
+  request.onsuccess=()=>{
+   const previous=request.result||{version:1,topics:{},questions:{}};
+   const values=previous[field]||{};
+   next={...previous,[field]:{...values,[id]:update(values[id])}};
+   store.put(next,'study_progress_v1');
+  };
+ });
+}
 function toast(msg){const t=$('#toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',1800)}
 function setScreen(html){$('#screen').innerHTML='<div class="screenInner">'+html+'</div>';$('#screen').scrollTop=0}
 function currentSubject(){return DATA?DATA.subjects.find(s=>s.code===subject):null}
@@ -30,29 +48,30 @@ function questionCount(){return DATA?DATA.subjects.reduce((n,s)=>n+asList(s.ques
 function updateStatus(){$('#statusBtn').textContent=DATA?'Local data · '+questionCount()+' questions':'No local data'}
 function updateContext(){const s=currentSubject();const m=mode==='rapid'?'Rapid':'Learn';$('#contextLabel').textContent=s?'Paper '+paper+' - '+s.subject+' - '+m:'Paper '+paper+' - '+m}
 
-function flatten(){
- flat=[];
- DATA.subjects.forEach(s=>{
+function flatten(source=DATA){
+ const records=[];
+ source.subjects.forEach(s=>{
   const base={paper:s.paper,code:s.code,subject:s.subject};
   const str=v=>Array.isArray(v)?v.join(" "):typeof v==="string"?v:"";
-  asList(s.rules).forEach(x=>flat.push({...base,type:"RULE",title:x.title||x.id||"Rule",
+  asList(s.rules).forEach(x=>records.push({...base,type:"RULE",title:x.title||x.id||"Rule",
    text:[x.rule,x.when,x.triggers,x.exception,x.deadline,x.procedure,x.trap,x.source,x.detail].map(str).join(" "),obj:x}));
-  asList(s.deadlines).forEach(x=>flat.push({...base,type:"DEADLINE",title:x.action||x.title||"Deadline",
+  asList(s.deadlines).forEach(x=>records.push({...base,type:"DEADLINE",title:x.action||x.title||"Deadline",
    text:[x.deadline,x.action,x.start,x.exception,x.consequence,x.source].map(str).join(" "),obj:x}));
-  asList(s.procedures).forEach(x=>flat.push({...base,type:"PROCEDURE",title:x.title||"Procedure",
+  asList(s.procedures).forEach(x=>records.push({...base,type:"PROCEDURE",title:x.title||"Procedure",
    text:asList(x.steps).map(st=>[st.step,st.party,st.precondition,st.document,st.deadline,st.consequence,st.source].map(str).join(" ")).join(" "),obj:x}));
-  asList(s.traps).forEach(x=>flat.push({...base,type:"TRAP",title:x.trap||x.title||"Exam trap",
+  asList(s.traps).forEach(x=>records.push({...base,type:"TRAP",title:x.trap||x.title||"Exam trap",
    text:[x.attractive,x.rule,x.spot,x.source].map(str).join(" "),obj:x}));
   asList(s.topics).forEach(meta=>{
    const x=s.teach?.topics?.[meta.id]||{};
-   flat.push({...base,type:"LESSON",title:meta.name||meta.id||"Lesson",
+   records.push({...base,type:"LESSON",title:meta.name||meta.id||"Lesson",
     text:[meta.common_term,meta.formal_term,x.big_picture,x.who,x.when,x.basic_rule,x.exam_application,x.exam_trap_plain,
       ...asList(x.core_concepts).map(t=>[t.term,t.plain,t.legal].map(str).join(" "))].map(str).join(" "),
     obj:x,topicId:meta.id});
   });
-  asList(s.questions).forEach(x=>flat.push({...base,type:"QUESTION",title:(x.label||"Question")+(x.qno?" · Q"+x.qno:""),
+  asList(s.questions).forEach(x=>records.push({...base,type:"QUESTION",title:(x.label||"Question")+(x.qno?" · Q"+x.qno:""),
    text:[x.stem,Object.values(x.options||{}).join(" "),x.explanation,x.tested_rule,x.trap,x.authority,x.course_material].map(str).join(" "),obj:x}));
  });
+ return records;
 }
 
 function renderSubjects(){
@@ -209,6 +228,7 @@ function provenanceBadges(q){
   const status=String(q.answer_status||'').toUpperCase();let out='';
   if(status==='OFFICIAL')out+='<span class="badge official">OFFICIAL SILE ANSWER</span>';
   else if(status==='DERIVED')out+='<span class="badge derived">DERIVED - NOT OFFICIAL</span>';
+  else if(status==='EXCLUDED')out+='<span class="badge unresolved">EXCLUDED</span>';
   else if(status.includes('UNRESOLVED'))out+='<span class="badge unresolved">UNRESOLVED - NOT SCORED</span>';
   if(String(q.answer_basis||'').includes('SOURCE CONFLICT')||String(q.notes||'').includes('SOURCE CONFLICT'))out+='<span class="badge conflict">SOURCE CONFLICT</span>';
   if(q.confidence)out+='<span class="badge neutral">Confidence: '+esc(q.confidence)+'</span>';
@@ -248,80 +268,84 @@ function focusHeader(){return '<div class="focusHeader"><button id="backBtn" cla
 function bindBack(){$('#backBtn').onclick=exitFocus}
 function section(title,content,cls){if(content==null||content===''||(Array.isArray(content)&&!content.length))return'';let body=Array.isArray(content)?'<ul class="bulletList">'+content.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'<p>'+esc(content)+'</p>';return '<section class="readSection '+(cls||'')+'"><h2>'+esc(title)+'</h2>'+body+'</section>'}
 
-function renderRapidQuestion(q){
- const status=String(q.answer_status||"").toUpperCase();
- const incomplete=Object.keys(q.options||{}).length!==4;
- const answer=status.includes("UNRESOLVED")?"No settled answer — not scored":(q.answer||"No answer verified");
- const opts=Object.entries(q.options||{}).map(([k,v])=>'<div class="optionBox"><strong>'+esc(k)+'.</strong> '+esc(v)+'</div>').join("");
- enterFocus();
- setScreen('<div class="reader">'+focusHeader()+
- '<div class="readerMeta">Rapid question reference · '+esc(q.sitting||q.category||"Source question")+'</div>'+
- '<h1 class="pageTitle">'+esc((q.label||"Question")+(q.qno?" · Q"+q.qno:""))+'</h1>'+
- '<div class="provenanceStrip">'+provenanceBadges(q)+'</div>'+
- (incomplete?'<div class="dataNote"><strong>Source review needed:</strong> this question has '+Object.keys(q.options||{}).length+' recorded options. Verify against the original question before relying on the answer.</div>':"")+
- section("Question",q.stem,"rule")+
- '<section class="readSection"><h2>Recorded answer choices</h2><div class="optionList">'+opts+'</div></section>'+
- section("Answer status / recorded key",answer,"answer")+
- section("Rule tested",q.tested_rule,"rule")+
- section("Reasoning",q.explanation||q.official_explanation)+
- section("Exam trap",q.trap,"trap")+
- section("Answer basis",q.answer_basis,"warning")+
- section("Legal authority",q.authority)+section("Course material",q.course_material)+
- '<div class="dataNote">For attempt tracking and self-testing, switch to Learn → Practice. The recorded answer can be derived or unresolved; refer to its provenance.</div></div>');
- bindBack();
+function questionDetails(label,body,id){
+ return '<details class="readSection questionDetails"'+(id?' id="'+id+'"':'')+'><summary>'+label+'</summary>'+
+  (body||'<p>No source text recorded for this section.</p>')+'</details>';
 }
+
 function openQuestion(q){
- if(mode==='rapid')return renderRapidQuestion(q);
- currentQuestion=q;
+ const rapid=mode==='rapid';
+ const status=String(q.answer_status||'').toUpperCase();
+ const excluded=status==='EXCLUDED';
+ const entries=Object.entries(q.options||{});
+ const incomplete=entries.length!==4;
+ const official=status==='OFFICIAL'&&!incomplete&&Object.hasOwn(q.options||{},q.answer);
+ const acceptedStatus=status==='DERIVED'||status==='OFFICIAL';
+ const answer=acceptedStatus&&q.answer?q.answer:'No settled answer recorded';
+ const settings=studyProgress.review?.[q.id]||{};
+ const opts='<div class="optionList">'+entries.map(([k,v])=>'<div class="optionBox"><strong>'+esc(k)+'.</strong> '+esc(v)+'</div>').join('')+'</div>';
+ const perOption=entries.map(([key])=>'<div class="conceptCard"><div class="conceptTerm">Option '+esc(key)+'</div><div class="conceptPlain">'+
+  esc(q.option_expl?.[key]||'No explanation recorded for this option.')+'</div></div>').join('');
+ const inner=section('Recorded answer',answer,'answer')+
+  section('Rule tested',q.tested_rule,'rule')+
+  section('Recorded reasoning',q.explanation)+
+  (q.official_explanation!==q.explanation?section('Official explanation',q.official_explanation):'')+
+  section('Exam trap',q.trap,'trap')+
+  section('Common mistake',q.common_mistake)+section('Answer basis',q.answer_basis,'warning');
+ const layman=section('What the question is testing',q.really_testing)+section('Key factual clue',q.key_clue)+section('How to approach it',q.fastest_route);
  enterFocus();
- const opts=Object.entries(q.options||{}).map(([k,v])=>'<div class="optionBox"><strong>'+esc(k)+'.</strong> '+esc(v)+'</div>').join("");
- const perOption=Object.entries(q.option_expl||{}).map(([k,v])=>
-  '<div class="conceptCard"><div class="conceptTerm">Option '+esc(k)+'</div><div class="conceptPlain">'+esc(v)+'</div></div>').join("");
- const status=String(q.answer_status||"").toUpperCase();
- const safeAnswer=status.includes("UNRESOLVED")?"No settled answer — not scored":(q.answer||"No settled answer");
- const incompleteOptions=Object.keys(q.options||{}).length!==4;
- const answer='<div id="answerBlock" class="hiddenAnswer">'+
- section("Answer",safeAnswer,"answer")+
- section("What is this question really testing?",q.really_testing||q.tested_rule,"rule")+
- section("How to reason through it",q.explanation||q.official_explanation,"")+
- section("Useful factual clue",q.key_clue)+
- section("Fastest route",q.fastest_route)+section("Exam trap",q.trap,"trap")+
- (perOption?'<section class="readSection"><h2>Why each option is right or wrong</h2><div class="conceptTable">'+perOption+'</div></section>':"")+
- section("Answer status and basis",q.answer_basis,"warning")+
- section("Course material",q.course_material)+section("Contact Session guidance",q.cs_guidance)+section("Legal authority",q.authority)+
- '</div>';
- const attempt=studyProgress.questions[q.id];
- setScreen('<div class="reader">'+focusHeader()+
-  '<div class="readerMeta">Revision practice · '+esc(q.sitting||q.category||"Question")+'</div>'+
-  '<h1 class="pageTitle">'+esc((q.label||"Question")+(q.qno?" · Q"+q.qno:""))+'</h1>'+
+ setScreen('<div class="reader" data-question-id="'+esc(q.id)+'">'+focusHeader()+
+  '<div class="readerMeta">'+esc(q.sitting||q.category||'Source question')+' · '+esc(q.id)+'</div>'+
+  '<h1 class="pageTitle">'+esc((q.label||'Question')+(q.qno?' · Q'+q.qno:''))+'</h1>'+
   '<div class="provenanceStrip">'+provenanceBadges(q)+'</div>'+
-  '<div class="dataNote">'+(incompleteOptions?'Source verification needed: answer options may be incomplete and this attempt will not count as official-key accuracy.':'Practice using source questions only; the recorded answer may require later reconciliation.')+'</div>'+
-  section("Question",q.stem,"rule")+
-  '<section class="readSection"><h2>Choose your answer</h2>'+window.SILEUX.questionAttemptUI(q,attempt)+'</section>'+
-  answer+'</div>');
+  (status==='DERIVED'?'<div class="dataNote"><strong>Derived answer subject to audit.</strong> Check the original material. The 8 November answer bank has yet to be reconciled with the later review.</div>':'')+
+  (incomplete?'<div class="dataNote">The source contains '+entries.length+' recorded choices. This question does not count toward official accuracy.</div>':'')+
+  (excluded?'<div class="dataNote"><strong>Excluded from practice and scoring.</strong></div>':'')+
+  section('Factual scenario',q.scenario||q.facts)+section('Question',q.stem,'rule')+
+  '<section class="readSection"><h2>'+(rapid||excluded?'Recorded answer choices':'Choose your answer')+'</h2>'+
+  (rapid||excluded?opts:window.SILEUX.questionAttemptUI(q,studyProgress.questions[q.id]))+'</section>'+
+  (excluded?section('Exclusion basis',q.answer_basis):'<details id="answerBlock" class="readSection questionDetails"'+(rapid?' open':'')+
+   '><summary>'+(rapid?'Recorded Answer':'Show Answer')+'</summary><div id="answerContent">'+inner+'</div></details>'+
+   questionDetails('Explain in Layman Terms',layman,'plainExplanation')+
+   questionDetails('Explain Each Option',perOption,'optionExplanations')+
+   questionDetails('Show Legal Authority',section('Authority',q.authority)+section('Course material',q.course_material)+section('Contact Session guidance',q.cs_guidance),'legalAuthority')+
+   '<div class="studyActions"><button id="findSimilar" class="secondaryButton">Find Similar Questions</button></div>')+
+  section('Source attribution',q.source||[q.sitting,q.course_material].filter(Boolean))+
+  '<details class="readSection questionDetails"><summary>Bookmark and notes</summary><div class="studyActions">'+
+  '<label><input type="checkbox" id="questionBookmark"'+(settings.bookmarked?' checked':'')+'> Bookmark this question</label></div>'+
+  '<label for="questionNote">My notes</label><textarea id="questionNote" rows="3" maxlength="6000">'+esc(settings.note||'')+'</textarea>'+
+  '<div class="studyActions"><button id="saveQuestionNote" type="button" class="secondaryButton">Save bookmark and notes</button></div>'+
+  '<p id="reviewFeedback" role="status"></p></details></div>');
  bindBack();
- const reveal=(selected,record)=>{
-  if(record&&selected){
-   const old=studyProgress.questions[q.id]||{attempts:0,officialCorrect:0};
-   const official=status==="OFFICIAL"&&Object.keys(q.options||{}).length===4;
-   studyProgress.questions[q.id]={
-     attempts:old.attempts+1,officialCorrect:old.officialCorrect+(official&&selected===q.answer?1:0),
-     lastSelected:selected,lastStatus:status,lastAttempt:new Date().toISOString()
-   };
-   dbPut('study_progress_v1',studyProgress).catch(err=>console.error("Progress save failed",err));
-  }
-  const message=window.SILEUX.interpretation(q,selected);
-  const feedback=$('#practiceFeedback');
-  if(feedback)feedback.innerHTML='<div class="dataNote">'+esc(message)+'</div>';
-  $('#answerBlock').classList.add("revealed");
-  $('#answerBlock').scrollIntoView({block:"nearest"});
+ const similar=$('#findSimilar');
+ if(similar)similar.onclick=()=>window.SILEFIND.findSimilar(q);
+ $('#saveQuestionNote').onclick=async()=>{
+  const feedback=$('#reviewFeedback');
+  const entry={bookmarked:$('#questionBookmark').checked,note:$('#questionNote').value.trim()};
+  try{
+   await saveStudyProgress('review',q.id,()=>entry);
+   feedback.textContent='Bookmark and notes saved on this device.';
+  }catch(err){feedback.textContent='Could not save bookmark and notes: '+err.message;}
  };
- $('#submitPractice').onclick=()=>{
-   const selected=document.querySelector('input[name="practiceChoice"]:checked');
-   if(!selected){const feedback=$('#practiceFeedback');if(feedback)feedback.textContent="Choose an answer first, or reveal without recording.";return;}
-   reveal(selected.value,true);$('#submitPractice').disabled=true;
+ if(rapid||excluded)return;
+ function reveal(selected){
+  $('#practiceFeedback').textContent=window.SILEUX.interpretation(q,selected);
+  $('#answerBlock').open=true;
+  $('#answerBlock').scrollIntoView({block:'nearest'});
+ }
+ $('#submitPractice').onclick=async()=>{
+  const selected=document.querySelector('input[name="practiceChoice"]:checked');
+  if(!selected){$('#practiceFeedback').textContent='Choose an answer first, or use Show Answer.';return;}
+  const submit=$('#submitPractice'), feedback=$('#practiceFeedback');
+  submit.disabled=true;
+  try{
+   await saveStudyProgress('questions',q.id,(old={attempts:0,officialCorrect:0})=>({
+    attempts:old.attempts+1,officialCorrect:(old.officialCorrect||0)+(official&&selected.value===q.answer?1:0),
+    lastSelected:selected.value,lastStatus:status,lastAttempt:new Date().toISOString()
+   }));
+   if(submit.isConnected)reveal(selected.value);
+  }catch(err){feedback.textContent='Could not save this attempt: '+err.message;submit.disabled=false;}
  };
- $('#revealWithoutAttempt').onclick=()=>reveal("",false);
 }
 function openRule(r){enterFocus();setScreen('<div class="reader">'+focusHeader()+'<div class="readerMeta">Rule - '+esc(r.topic||'')+'</div><h1 class="pageTitle">'+esc(r.title||r.id||'Rule')+'</h1>'+section('Core rule',r.rule,'rule')+section('When it applies',r.when,'')+section('Triggers',r.triggers,'')+section('Exception',r.exception,'')+section('Deadline',r.deadline,'')+section('Procedure',r.procedure,'')+section('Exam trap',r.trap,'trap')+section('Source',r.source,'')+section('Verification note',r.verify,'warning')+section('Detail',r.detail,'')+'</div>');bindBack()}
 function openDeadline(d){enterFocus();setScreen('<div class="reader">'+focusHeader()+'<div class="readerMeta">Deadline - '+esc(d.topic||'')+'</div><h1 class="pageTitle">'+esc(d.action||d.title||'Deadline')+'</h1>'+section('Deadline',d.deadline,'rule')+section('Starts from',d.start,'')+section('Exception',d.exception,'')+section('Consequence',d.consequence,'trap')+section('Source',d.source,'')+'</div>');bindBack()}
@@ -342,9 +366,11 @@ function openLesson(topicId){
  bindBack();
  $$('[data-related-id]').forEach(b=>b.onclick=()=>{const q=related.find(q=>q.id===b.dataset.relatedId);if(q)openQuestion(q)});
  $$('[data-study-state]').forEach(b=>b.onclick=async()=>{
-  studyProgress.topics[topicId]={state:b.dataset.studyState,updated:new Date().toISOString()};
-  await dbPut('study_progress_v1',studyProgress);
-  const el=$('#lessonProgressStatus');if(el)el.textContent=b.dataset.studyState==="understood"?
+  const state=b.dataset.studyState;
+  const el=$('#lessonProgressStatus');
+  try{await saveStudyProgress('topics',topicId,()=>({state,updated:new Date().toISOString()}));}
+  catch(err){el.textContent='Could not save topic progress: '+err.message;return;}
+  if(el)el.textContent=state==="understood"?
    "Marked as understood. Now practise related questions.":"Marked for revision. Return after reviewing examples and questions.";
  });
 }
@@ -356,18 +382,6 @@ function renderTools(){
  setScreen('<div class="paperHero"><div class="eyebrow">Private offline tools</div><h1 class="pageTitle">Calculators and guided legal tests</h1><p>Select a subject to access its locally installed calculators and decision trees. Private source data and formula code are not on GitHub.</p><div class="subjectGrid">'+subs.map(x=>'<button class="subjectCard" data-select-tools="'+esc(x.code)+'"><div class="subjectCardTitle">'+esc(x.subject)+'</div><div class="subjectCardMeta">Open subject tools</div></button>').join('')+'</div></div>');
  $$('[data-select-tools]').forEach(b=>b.onclick=()=>{subject=b.dataset.selectTools;activeTab='tools';renderSubjects();updateContext();renderSubjectDashboard()});
 }
-
-function renderSearch(){
-  if(!DATA)return;
-  searchType='';
-  setScreen('<div class="searchPanel"><div class="eyebrow">Search</div><h1 class="pageTitle">Find material quickly</h1><input id="globalSearch" class="searchInput" type="search" autocomplete="off" placeholder="Search rule, question, deadline, trap, phrase..."><div class="searchScope"><button data-searchtype="" class="active">All</button><button data-searchtype="QUESTION">Questions</button><button data-searchtype="RULE">Rules</button><button data-searchtype="DEADLINE">Deadlines</button><button data-searchtype="PROCEDURE">Procedures</button><button data-searchtype="TRAP">Traps</button></div><div id="searchResults" class="searchResults"></div></div>');
-  $('#globalSearch').focus();
-  $$('.searchScope button').forEach(b=>b.onclick=()=>{searchType=b.dataset.searchtype;$$('.searchScope button').forEach(x=>x.classList.toggle('active',x===b));runGlobalSearch()});
-  $('#globalSearch').oninput=runGlobalSearch;
-}
-function rankText(it,q){const terms=q.toLowerCase().split(/\s+/).filter(Boolean);const title=String(it.title||'').toLowerCase();const text=String(it.text||'').toLowerCase();let score=0;terms.forEach(t=>{if(title.includes(t))score+=8;if(text.includes(t))score+=2});return score}
-function runGlobalSearch(){const q=$('#globalSearch').value.trim();const box=$('#searchResults');if(!q){box.innerHTML='';return}let a=flat.filter(x=>x.paper===paper&&(!subject||x.code===subject)&&(!searchType||x.type===searchType));a=a.map(x=>[rankText(x,q),x]).filter(x=>x[0]>0).sort((a,b)=>b[0]-a[0]).slice(0,100).map(x=>x[1]);lastList=a;box.innerHTML='<div class="listHeader"><h2>Results</h2><div class="listCount">'+a.length+' results</div></div><div class="contentList">'+a.map((it,i)=>'<button class="contentRow" data-searchindex="'+i+'"><div class="rowTop"><span class="rowType">'+esc(it.type)+'</span><span class="rowMeta">'+esc(it.subject)+'</span></div><div class="rowTitle">'+esc(it.title)+'</div><div class="rowExcerpt">'+esc(it.text).slice(0,260)+'</div></button>').join('')+'</div>';$$('[data-searchindex]').forEach(b=>b.onclick=()=>openSearchItem(lastList[Number(b.dataset.searchindex)]))}
-function openSearchItem(it){subject=it.code;renderSubjects();updateContext();if(it.type==='QUESTION')openQuestion(it.obj);else if(it.type==='RULE')openRule(it.obj);else if(it.type==='DEADLINE')openDeadline(it.obj);else if(it.type==='PROCEDURE')openProcedure(it.obj);else if(it.type==='TRAP')openTrap(it.obj)}
 
 function renderData(){
  const topics=Object.values(studyProgress.topics||{}),questions=Object.values(studyProgress.questions||{});
@@ -389,17 +403,20 @@ function renderData(){
   const file=e.target.files?.[0];if(!file)return;
   try{const x=JSON.parse(await file.text());
    if(x.version!==1||!x.topics||!x.questions||Array.isArray(x.topics)||Array.isArray(x.questions))throw new Error("Invalid progress backup");
-   studyProgress=x;await dbPut('study_progress_v1',studyProgress);toast("Revision progress restored");renderData()
+   await dbPut('study_progress_v1',x);studyProgress=x;toast("Revision progress restored");renderData()
   }catch(err){alert("Progress restore failed: "+err.message)}
  };
 }
 function renderProgress(){
  const topics=studyProgress.topics||{},questions=studyProgress.questions||{};
+ if(!DATA)return renderSetup();
+ const saved=flat.filter(x=>x.type==="QUESTION"&&studyProgress.review?.[x.obj.id]?.bookmarked);
+ const savedRows=saved.map((x,i)=>'<button class="contentRow" data-saved-question="'+i+'">'+esc(x.obj.id+' · '+x.title)+'</button>').join('');
  const summaries=DATA.subjects.filter(s=>s.paper===paper).map(s=>{
   const all=asList(s.topics),understood=all.filter(t=>topics[t.id]?.state==="understood").length,
     weak=all.filter(t=>topics[t.id]?.state==="needs-review").length;
   const attempts=asList(s.questions).filter(q=>questions[q.id]);
-  const official=asList(s.questions).filter(q=>q.answer_status==="OFFICIAL"&&questions[q.id]);
+  const official=asList(s.questions).filter(q=>q.answer_status==="OFFICIAL"&&Object.keys(q.options||{}).length===4&&Object.hasOwn(q.options,q.answer)&&questions[q.id]?.lastStatus==="OFFICIAL");
   const scored=official.reduce((n,q)=>n+(questions[q.id]?.officialCorrect||0),0);
   const officialAttempts=official.reduce((n,q)=>n+(questions[q.id]?.attempts||0),0);
   return '<section class="readSection"><h2>'+esc(s.subject)+'</h2><p>'+understood+'/'+all.length+' lessons understood; '+weak+' need revision. '+attempts.length+' questions attempted.'+
@@ -407,8 +424,20 @@ function renderProgress(){
  }).join("");
  setScreen('<div class="eyebrow">Revision progress · Paper '+paper+'</div><h1 class="pageTitle">What I understand and what to revise</h1>'+
  '<p class="pageLead">Only questions with official SILE answers contribute to scored accuracy. Derived-answer comparisons and unresolved questions are not counted as officially correct or incorrect.</p>'+
- summaries+'<div class="dataActions"><button class="secondaryButton" id="exportProgressPage">Export progress</button></div>');
+ summaries+'<section class="readSection"><h2>Bookmarked questions</h2>'+
+   (savedRows||'<p>Choose Bookmark and notes in a question reader to save it here.</p>')+'</section><div class="dataActions"><button class="secondaryButton" id="exportProgressPage">Export progress</button></div>');
  $('#exportProgressPage').onclick=exportStudyProgress;
+ $$('[data-saved-question]').forEach(button=>button.onclick=()=>{
+  const item=saved[Number(button.dataset.savedQuestion)];
+  subject=item.code;
+  paper=item.paper;
+  $$('[data-paper]').forEach(x=>x.classList.toggle('active',Number(x.dataset.paper)===paper));
+  renderSubjects();
+  updateContext();
+  openQuestion(item.obj);
+  $('#backBtn').textContent='Back to revision progress';
+  $('#backBtn').onclick=()=>{document.body.classList.remove('focusMode');renderProgress();};
+ });
 }
 function exportStudyProgress(){
  const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(studyProgress,null,2)],{type:"application/json"}));
@@ -416,7 +445,30 @@ function exportStudyProgress(){
 }
 function renderSetup(){setScreen('<div class="dataPanel"><div class="eyebrow">Setup</div><h1 class="pageTitle">Import verified SILE data</h1><p>Import the verified JSON once. The dataset is then stored locally on this iPad.</p><div class="dataActions"><button id="importNow" class="primaryButton">Choose JSON file</button></div></div>');$('#importNow').onclick=()=>$('#fileInput').click()}
 
-async function importFile(file){const o=JSON.parse(await file.text());if(!Array.isArray(o.subjects)||o.subjects.length!==8)throw new Error('Expected 8-subject SILE dataset');const q=o.subjects.reduce((n,s)=>n+asList(s.questions).length,0);if(q!==323)throw new Error('Expected 323 questions, found '+q);await dbPut('dataset',o);DATA=o;flatten();subject='';activeTab='overview';updateStatus();renderSubjects();updateContext();renderPaperDashboard();toast('Verified dataset stored locally')}
+async function importFile(file){
+ const dataset=JSON.parse(await file.text());
+ if(!Array.isArray(dataset?.subjects)||dataset.subjects.length!==8)throw new Error('Expected an eight-subject SILE dataset');
+ if(dataset.subjects.some(s=>!s||typeof s.code!=='string'||typeof s.subject!=='string'||![1,2].includes(s.paper))){
+  throw new Error('Subject names, codes and paper numbers are required');
+ }
+ const questions=dataset.subjects.flatMap(s=>asList(s.questions));
+ if(questions.length!==323)throw new Error('Expected 323 questions, found '+questions.length);
+ if(questions.some(q=>typeof q?.id!=='string'||!q.id.trim()||typeof q.stem!=='string')){
+  throw new Error('Every question needs an ID and recorded wording');
+ }
+ if(new Set(questions.map(q=>q.id)).size!==questions.length)throw new Error('Question IDs must be unique');
+ const records=flatten(dataset);
+ await dbPut('dataset',dataset);
+ DATA=dataset;
+ flat=records;
+ subject='';
+ activeTab='overview';
+ updateStatus();
+ renderSubjects();
+ updateContext();
+ renderPaperDashboard();
+ toast('SILE dataset stored on this device');
+}
 async function backup(){if(!DATA)return;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(DATA)],{type:'application/json'}));a.download='SILE_iPad_dataset_backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
 
 function bindStatic(){
@@ -428,7 +480,7 @@ function bindStatic(){
     navToggle.setAttribute('aria-expanded',String(document.body.classList.contains('navOpen')));
   };
   $('#progressBtn').onclick=()=>{document.body.classList.remove('focusMode');document.body.classList.remove('navOpen');renderProgress()};
-  $('#statusBtn').onclick=()=>{document.body.classList.remove('focusMode');renderData()};
+  $('#statusBtn').onclick=()=>{document.body.classList.remove('focusMode');if(DATA)renderData();else renderSetup()};
   $('#toolsBtn').onclick=()=>{if(DATA){document.body.classList.remove('focusMode');renderTools()}};
   $('#dataBtn').onclick=()=>{if(DATA){document.body.classList.remove('focusMode');renderData()}};
   $('#fileInput').onchange=async e=>{const f=e.target.files&&e.target.files[0];try{if(f)await importFile(f)}catch(err){alert('Import failed: '+err.message)}finally{e.target.value=''}};
@@ -445,7 +497,7 @@ async function init(){
     await bootTimed(openDB(), 'Opening offline storage');
     studyProgress = await bootTimed(dbGet('study_progress_v1'), 'Reading revision progress') || {version:1,topics:{},questions:{}};
     DATA = await bootTimed(dbGet('dataset'), 'Reading local study data');
-    if(DATA) flatten();
+    if(DATA) flat=flatten();
     updateStatus();
     renderSubjects();
     updateContext();
@@ -461,7 +513,7 @@ async function init(){
       '<p>The local study data and progress have not been deleted. Error: <strong>' + msg + '</strong></p>' +
       '<p>Connect to Wi-Fi, then open <a href="diagnostic.html">SILE Diagnostics</a> to check the app. Do not delete the Home Screen app or clear website data.</p></div>');
   } finally {
-    if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(err => console.error('SILE service worker', err));
+    if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).catch(err => console.error('SILE service worker', err));
   }
   // Restore nonessential private tools only AFTER the study interface is ready.
   if(db && window.SILETOOLS) {

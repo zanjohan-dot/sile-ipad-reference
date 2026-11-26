@@ -345,3 +345,23 @@ body.focusMode .mainArea{min-width:0}
 .localSearchSetup .calcField{margin:14px 0}
 .localSearchSetup #modelStatus{white-space:pre-wrap;overflow-wrap:anywhere}
 @media(max-width:900px){.learningShortcuts{grid-template-columns:1fr}.modeIntro{padding:16px}.rapidHome,.learnHome{padding:17px}.rapidHome .pageTitle,.learnHome .pageTitle{font-size:1.55rem}}
+
+.questionDetails > summary {
+ cursor: pointer;
+ min-height: 44px;
+ padding: 12px 0;
+ font-weight: 700;
+ color: var(--ink);
+}
+.questionDetails > summary:focus-visible {
+ outline: 2px solid currentColor;
+ outline-offset: 3px;
+}
+.questionDetails textarea {
+ display: block;
+ width: 100%;
+ max-width: 100%;
+ margin-top: 6px;
+ padding: 10px;
+ font: inherit;
+}

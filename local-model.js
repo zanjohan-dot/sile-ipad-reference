@@ -57,7 +57,7 @@ async function load(){
 }
 function getEvidence(){
  const query=$("findQuery")?.value?.trim()||"";
- const refs=(window.SILEFIND?.lastMatches||[]).slice(0,7);
+ const refs=(window.SILEFIND?.lastMatches||[]).filter(it=>it.obj?.answer_status!=="EXCLUDED").slice(0,7);
  const docs=refs.map((it,i)=>{
    const o=it.obj||{};
    const fields=it.type==="QUESTION"?[
