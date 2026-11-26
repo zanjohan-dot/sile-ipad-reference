@@ -289,6 +289,10 @@ function questionMatch(doc,query){
 function structuredMatches(query,idx){
  const exactId=idx.ids.get(query);
  if(exactId)return {docs:exactId,idMatch:true};
+ if(/^(?:please )?(?:explain|what is|what s|help me understand) /.test(query)){
+  const mentioned=[...idx.ids].flatMap(([id,docs])=>containsPhrase(query,id)?docs:[]);
+  if(mentioned.length)return {docs:mentioned,idMatch:true};
+ }
  const complete=idx.sessions.get(query);
  if(complete)return {docs:complete,idMatch:false};
  const numbered=query.match(/(?:^| )(?:q\s*|question\s+)(\d{1,3})$/);
@@ -423,35 +427,42 @@ function show(){
   box.innerHTML=hasAnswer?"":'<div class="emptyHint">'+(similarSource?"No related questions found.":"No local matches. Try a distinctive phrase or question ID and check the paper filters.")+'</div>';
   return;
  }
- const groups=["Exact Question Matches","Similar Past-Year Questions","SILE Sample Questions","Learning Materials","Legal References","Excluded Questions"];
+ const groups=["Exact Question Matches","Similar Past-Year Questions","SILE Sample Questions","Original Practice","Learning Materials","Legal References","Excluded Questions"];
  const rows=groups.map(()=>[]);
  const groupIndex=x=>{
-  if(excluded(x))return 5;
+  if(excluded(x))return 6;
   if(x.exact||x.idMatch)return 0;
   if(x.type==="QUESTION"){
    const category=String(x.obj.category||"").toUpperCase();
    if(category==="PAST")return 1;
    if(category==="SAMPLE")return 2;
-   return 3;
+   if(category==="ORIGINAL_PRACTICE")return 3;
+   return 4;
   }
-  return x.type==="LESSON"?3:4;
+  return x.type==="LESSON"?4:5;
  };
  lastMatches.forEach((x,i)=>rows[groupIndex(x)].push({x,i}));
- const count=lastMatches.length-rows[5].length;
+ const count=lastMatches.length-rows[6].length;
  box.innerHTML='<div class="listHeader"><h2>'+(similarSource?'Questions on related issues':'Search results')+'</h2><div class="listCount">'+
-   count+' matches'+(rows[5].length?' · '+rows[5].length+' excluded':'')+'</div></div>'+
+   count+' matches'+(rows[6].length?' · '+rows[6].length+' excluded':'')+'</div></div>'+
    (similarSource?'<p class="pageLead">Related issues from '+E(similarSource.id)+'. Review each question’s facts and recorded answer separately.</p>':'')+
    rows.map((group,g)=>{
     if(!group.length)return "";
-    const shown=(g===0||g===5)?group:group.slice(0,visibleLimit);
+    const shown=(g===0||g===6)?group:group.slice(0,visibleLimit);
     return '<section class="readSection"><h2>'+groups[g]+' ('+group.length+')</h2>'+
      shown.map(({x,i})=>'<button class="contentRow" data-find-index="'+i+'"><div class="rowTop"><span class="rowType">'+E(x.type)+'</span><span class="rowMeta">Paper '+E(x.paper)+' · '+E(x.subject)+'</span></div><div class="rowTitle">'+E(x.type==="QUESTION"?(x.obj.id||x.title):x.title)+'</div><div class="rowExcerpt">'+E(String(x.type==="QUESTION"?x.obj.stem:x.text).slice(0,350))+'</div><div class="sourceMeta">'+
      E([x.obj?.sitting,x.obj?.answer_status].filter(Boolean).join(" · "))+'</div></button>').join("")+
      (shown.length<group.length?'<p class="readerMeta">Showing '+shown.length+' of '+group.length+'</p>':'')+'</section>';
-   }).join("")+(rows.some((group,i)=>i!==0&&i!==5&&group.length>visibleLimit)?'<button class="secondaryButton" id="showMoreMatches">Show more results</button>':'');
+   }).join("")+(rows.some((group,i)=>i!==0&&i!==6&&group.length>visibleLimit)?'<button class="secondaryButton" id="showMoreMatches">Show more results</button>':'');
  box.querySelectorAll("[data-find-index]").forEach(el=>el.onclick=()=>open(lastMatches[Number(el.dataset.findIndex)],Number(el.dataset.findIndex)));
  const more=document.getElementById("showMoreMatches");
  if(more)more.onclick=()=>{visibleLimit+=25;show();};
+}
+function plainStudyNote(value){
+ const note=text(value).trim();
+ if(!note)return "";
+ const excerpt=note.length>750?note.slice(0,note.lastIndexOf(" ",750)>0?note.lastIndexOf(" ",750):750)+"…":note;
+ return '<div class="studyPlainNote"><h3>In plain English</h3><p>'+E(excerpt)+'</p></div>';
 }
 function showStudyMatches(box){
  const idx=getIndex();
@@ -462,6 +473,7 @@ function showStudyMatches(box){
  }
  box.innerHTML='<section class="readSection"><h2>Likely study topics</h2><p>Matched against your study materials. Open a source to check its wording and answer status.</p>'+
   related.map((hit,i)=>'<div class="readSection"><h3>'+E(hit.title)+'</h3><div class="sourceMeta">'+E(hit.subject)+'</div>'+
+   (i===0&&hit.lesson?plainStudyNote(hit.lesson.obj.big_picture):'')+
    '<div class="studyActions">'+(hit.lesson?'<button class="secondaryButton" data-study-lesson="'+i+'">Read lesson</button>':'')+
    (hit.question?'<button class="secondaryButton" data-study-question="'+i+'">Open '+E(hit.question.obj.id)+'</button>':'')+'</div></div>').join("")+'</section>';
  box.querySelectorAll("[data-study-lesson],[data-study-question]").forEach(button=>{
@@ -483,11 +495,12 @@ function showRecordedAnswer(box){
  }
  const [item]=exact, q=item.obj;
  const status=String(q.answer_status||"").toUpperCase();
- const hasKey=(status==="OFFICIAL"||status==="DERIVED")&&q.answer;
- const label=status==="OFFICIAL"?"Official SILE answer":status==="DERIVED"?"Derived answer · subject to audit":status==="EXCLUDED"?"Excluded from practice":"Unresolved · unscored";
+ const hasKey=(status==="OFFICIAL"||status==="DERIVED"||status==="PRACTICE")&&q.answer;
+ const label=status==="OFFICIAL"?"Official SILE answer":status==="DERIVED"?"Derived answer · subject to audit":status==="PRACTICE"?"Original practice key":status==="EXCLUDED"?"Excluded from practice":"Unresolved · unscored";
  const key=hasKey?q.answer:"No settled answer recorded";
  const option=hasKey?q.options?.[key]:"";
- const details='<p>'+E(key)+'</p>'+(option?'<div>'+E(option)+'</div>':'')+'<div class="sourceMeta">'+E(label)+'</div>';
+ const details='<p>'+E(key)+'</p>'+(option?'<div>'+E(option)+'</div>':'')+'<div class="sourceMeta">'+E(label)+'</div>'+
+  (hasKey?plainStudyNote(q.really_testing||q.fastest_route||q.tested_rule):'');
  box.innerHTML='<section class="readSection questionKey"><h2>Recorded answer · '+E(q.id)+'</h2>'+
   (mode==="learn"&&hasKey?'<details><summary>Show recorded answer</summary>'+details+'</details>':details)+
   '<div class="studyActions"><button class="secondaryButton" id="openRecordedAnswer">Open source question</button></div></section>';
