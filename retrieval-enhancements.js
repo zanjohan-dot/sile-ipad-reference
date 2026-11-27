@@ -186,6 +186,17 @@ function classifyStudyQuery(query,model){
     question:examples[0]?.item,subject:row.lesson?.subject||examples[0]?.item.subject};
   });
 }
+function studyPassages(item){
+ const obj=item.obj;
+ let fields;
+ if(item.type==="QUESTION")fields=[obj.tested_rule,obj.explanation,...Object.values(obj.option_expl||{})];
+ else if(item.type==="LESSON")fields=[obj.basic_rule,obj.big_picture,obj.exam_application,
+  ...Object.values(obj.core_concepts||{}).flatMap(concept=>[concept.plain,concept.legal])];
+ else fields=[obj.rule,obj.detail];
+ return fields.map(text).flatMap(field=>field.split(/\n+|(?<=[.!?])\s+/))
+  .map(line=>line.trim()).filter(line=>line.length>=35&&line.length<=480)
+  .map(line=>({line,terms:contentTokens(line)}));
+}
 function makeIndex(items){
  const docs=[],postings=new Map(),ids=new Map(),sessions=new Map(),stems=new Map(),optionLookup=new Map();
  const lessons=new Map(items.filter(it=>it.type==="LESSON").map(it=>[it.topicId,it.title]));
@@ -215,7 +226,7 @@ function makeIndex(items){
    add([q.authority,q.tested_rule,text(q.keywords)].join(" "),3);
   }
   const passages=q?[stem,...options,topic,normalize(q.authority),normalize(q.tested_rule)]:[title,normalize(it.text)];
-  const doc={it,stem,options,topic,issue,key,sitting,passages,title};
+  const doc={it,stem,options,topic,issue,key,sitting,passages,title,studyPassages:studyPassages(it)};
   docs.push(doc);
   if(it.type==="LESSON")lessonDocs.set(it.topicId,doc);
   addLookup(ids,normalize(q?.id),doc);
@@ -229,7 +240,20 @@ function makeIndex(items){
    postings.get(word).push({doc,weight});
   }
  }
- return {docs,postings,ids,sessions,stems,optionLookup,subjects,codes,lessonDocs,spelling:new Map(),studyTopics:null};
+ const verifiedClaims=new Map();
+ for(const claim of Array.isArray(DATA.verifiedStudyClaims)?DATA.verifiedStudyClaims:[]){
+  const lesson=lessonDocs.get(claim?.topicId)?.it;
+  if(!lesson||!Array.isArray(claim.queries)||!claim.answer?.trim?.()||!claim.plain?.trim?.()||
+     !claim.source?.title?.trim?.()||!claim.source.locator?.trim?.()||!claim.source.passage?.trim?.())continue;
+  const related=ids.get(normalize(claim.questionId))?.[0]?.it;
+  const question=related?.obj.topic===lesson.topicId&&!excluded(related)?related:null;
+  const row={claim,lesson,question};
+  for(const query of claim.queries){
+   if(typeof query!=="string"||!normalize(query))continue;
+   addLookup(verifiedClaims,normalize(query),row);
+  }
+ }
+ return {docs,postings,ids,sessions,stems,optionLookup,subjects,codes,lessonDocs,verifiedClaims,spelling:new Map(),studyTopics:null};
 }
 
 function getIndex(){
@@ -464,6 +488,39 @@ function plainStudyNote(value){
  const excerpt=note.length>750?note.slice(0,note.lastIndexOf(" ",750)>0?note.lastIndexOf(" ",750):750)+"…":note;
  return '<div class="studyPlainNote"><h3>In plain English</h3><p>'+E(excerpt)+'</p></div>';
 }
+function showVerifiedClaim(box){
+ const matches=(getIndex().verifiedClaims.get(normalize(lastText))||[])
+  .filter(({lesson})=>(lastAll||lesson.paper===paper)&&(!lastSubjectScope||!subject||lesson.code===subject));
+ if(matches.length!==1)return false;
+ const [{claim,lesson,question}]=matches;
+ box.innerHTML='<section class="readSection questionKey"><h2>Answer from SILE materials</h2>'+
+  '<p><strong>'+E(claim.answer)+'</strong></p>'+plainStudyNote(claim.plain)+
+  '<details id="verifiedSource"><summary>Show SILE source</summary><p class="sourceMeta">'+
+  E(claim.source.title+' · '+claim.source.locator)+'</p><blockquote>'+E(claim.source.passage)+'</blockquote></details>'+
+  '<div class="studyActions"><button class="secondaryButton" id="openVerifiedLesson">Read related lesson</button>'+
+  (question?'<button class="secondaryButton" id="openVerifiedQuestion">Open '+E(question.obj.id)+'</button>':'')+'</div></section>';
+ for(const [id,item] of [["openVerifiedLesson",lesson],["openVerifiedQuestion",question]]){
+  const button=document.getElementById(id);
+  if(button)button.onclick=()=>{
+   const wasOpen=document.getElementById("verifiedSource").open;
+   open(item,undefined,"#"+id);
+   const back=document.getElementById("backBtn");
+   if(!back)return;
+   const restore=back.onclick;
+   back.onclick=()=>{restore();document.getElementById("verifiedSource").open=wasOpen;};
+  };
+ }
+ return true;
+}
+function studyExcerpt(query,doc,fallback){
+ const terms=contentTokens(query);
+ let result=fallback,best=1;
+ for(const {line,terms:words} of doc?.studyPassages||[]){
+  const score=[...terms].filter(word=>words.has(word)).length;
+  if(score>best){best=score;result=line;}
+ }
+ return result;
+}
 function showStudyMatches(box){
  const idx=getIndex();
  idx.studyTopics??=fitStudyTopics(flat);
@@ -471,9 +528,9 @@ function showStudyMatches(box){
  if(!related.length){
   return false;
  }
- box.innerHTML='<section class="readSection"><h2>Likely study topics</h2><p>Matched against your study materials. Open a source to check its wording and answer status.</p>'+
+ box.innerHTML='<section class="readSection"><h2>Likely study topics</h2><p>No verified direct answer for this wording. Check the relevant rule and whether the facts, timing and exceptions in the source fit your question.</p>'+
   related.map((hit,i)=>'<div class="readSection"><h3>'+E(hit.title)+'</h3><div class="sourceMeta">'+E(hit.subject)+'</div>'+
-   (i===0&&hit.lesson?plainStudyNote(hit.lesson.obj.big_picture):'')+
+   (i===0&&hit.lesson?plainStudyNote(studyExcerpt(lastText,idx.lessonDocs.get(hit.lesson.topicId),hit.lesson.obj.big_picture)):'')+
    '<div class="studyActions">'+(hit.lesson?'<button class="secondaryButton" data-study-lesson="'+i+'">Read lesson</button>':'')+
    (hit.question?'<button class="secondaryButton" data-study-question="'+i+'">Open '+E(hit.question.obj.id)+'</button>':'')+'</div></div>').join("")+'</section>';
  box.querySelectorAll("[data-study-lesson],[data-study-question]").forEach(button=>{
@@ -488,7 +545,7 @@ function showStudyMatches(box){
 }
 function showRecordedAnswer(box){
  const exact=lastMatches.filter(it=>it.type==="QUESTION"&&(it.idMatch||it.exact));
- if(!exact.length)return showStudyMatches(box);
+ if(!exact.length)return showVerifiedClaim(box)||showStudyMatches(box);
  if(exact.length>1){
   box.textContent="Several records match this wording. Use the question ID or choose a result.";
   return true;

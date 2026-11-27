@@ -1,8 +1,8 @@
 /* Cache the full SILE shell. Updates only replace this app’s shell caches. */
-const CACHE="sile-study-v24";
+const CACHE="sile-study-v25";
 const ASSETS=[
  "./","./index.html","./styles.css?v=23","./app.js?v=24","./study-ux.js?v=23","./tools-enhancements.js?v=23",
- "./retrieval-enhancements.js?v=23","./diagnostic.html","./reset.html","./manifest.webmanifest",
+ "./retrieval-enhancements.js?v=25","./diagnostic.html","./reset.html","./manifest.webmanifest",
  "./icon-192.png","./icon-512.png","./apple-touch-icon.png"
 ];
 const scope=new URL(self.registration.scope);
