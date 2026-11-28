@@ -1,7 +1,7 @@
 /* Cache the full SILE shell. Updates only replace this app’s shell caches. */
-const CACHE="sile-revision-preview-shell-v27";
+const CACHE="sile-revision-preview-shell-v28";
 const ASSETS=[
- "./","./index.html","./reader.html","./offline-study.html","./styles.css?v=23","./app.js?v=27","./study-ux.js?v=23","./tools-enhancements.js?v=23",
+ "./","./index.html","./reader.html","./offline-study.html","./styles.css?v=23","./app.js?v=28","./study-ux.js?v=23","./tools-enhancements.js?v=23",
  "./retrieval-enhancements.js?v=25","./diagnostic.html","./reset.html","./manifest.webmanifest",
  "./icon-192.png","./icon-512.png","./apple-touch-icon.png"
 ];

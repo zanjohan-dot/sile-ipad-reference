@@ -463,13 +463,36 @@ async function checkOfflineSetup(){
    questionCount()+' questions stored. '+(tools?'Private tools stored.':'Private tools can be imported from a local file.');
  }catch(error){output.textContent='Could not check local storage: '+error.message;}
 }
-async function handleStudySelection(e){
-    const file=e.target.files?.[0];
-    try{if(file)await importStudyFile(file)}
-    catch(err){alert('Import failed: '+err.message)}
-    finally{e.target.value=''}
-  }
-const studyPicker='<label class="calcField"><span>Import study file</span><input id="fileInput" type="file"></label>';
+function bindStudyPicker(){
+ const picker=$('#fileInput');
+ const status=$('#fileStatus');
+ picker.onclick=()=>{status.textContent='Waiting for Files to return your selection…';};
+ picker.oncancel=()=>{status.textContent='No file was received. Choose a downloaded copy in Files.';};
+ picker.onchange=async()=>{
+  const file=picker.files?.[0];
+  if(!file){status.textContent='No file was received from Files.';return;}
+  picker.disabled=true;
+  status.textContent='Reading '+file.name+'…';
+  try{
+   await importStudyFile(file,message=>{status.textContent=message;});
+   if(DATA)renderData();
+   const result=$('#fileStatus');
+   if(result)result.textContent='Import complete. '+questionCount()+' questions on this device.'+
+    (questionCount()===323?' This file loaded the original bank only. Choose the updated 347-question file.':'');
+  }catch(err){status.textContent='Import failed. '+err.message;}
+  finally{picker.value='';picker.disabled=false;}
+ };
+}
+const studyPicker='<label class="calcField"><span>Import study file</span><input id="fileInput" type="file"></label><p id="fileStatus" role="status" aria-live="polite"></p>';
+function readStudyFile(file){
+ return new Promise((resolve,reject)=>{
+  const reader=new FileReader();
+  const timer=setTimeout(()=>{reader.abort();reject(new Error('Reading timed out. Save the file in On My iPad and try again.'));},30000);
+  reader.onload=()=>{clearTimeout(timer);resolve(reader.result);};
+  reader.onerror=()=>{clearTimeout(timer);reject(new Error('Files could not read this copy. Download it to On My iPad first.'));};
+  reader.readAsText(file);
+ });
+}
 function renderData(){
  const topics=Object.values(studyProgress.topics||{}),questions=Object.values(studyProgress.questions||{});
  const known=topics.filter(x=>x.state==="understood").length,needs=topics.filter(x=>x.state==="needs-review").length;
@@ -486,7 +509,7 @@ function renderData(){
  '<p id="offlineSetupStatus" role="status"></p>'+
  '<p class="readerMeta">Search, topic matching and the question reader use the study bank on this device.</p></div>');
  $('#checkOfflineSetup').onclick=checkOfflineSetup;
- $('#fileInput').onchange=handleStudySelection;
+ bindStudyPicker();
  $('#backupData').onclick=backup;
 }
 function renderProgress(){
@@ -576,7 +599,7 @@ function renderOriginalPractice(){
   $('#backBtn').onclick=()=>{document.body.classList.remove('focusMode');renderOriginalPractice();};
  });
 }
-function renderSetup(){setScreen('<div class="dataPanel"><div class="eyebrow">Setup</div><h1 class="pageTitle">Import SILE study data</h1><p>Choose your study file or backup. It will be stored on this iPad.</p><div class="dataActions">'+studyPicker+'</div></div>');$('#fileInput').onchange=handleStudySelection}
+function renderSetup(){setScreen('<div class="dataPanel"><div class="eyebrow">Setup</div><h1 class="pageTitle">Import SILE study data</h1><p>Choose your study file or backup. It will be stored on this iPad.</p><div class="dataActions">'+studyPicker+'</div></div>');bindStudyPicker()}
 
 function validateStudyBank(dataset){
  if(!Array.isArray(dataset?.subjects)||dataset.subjects.length!==8)throw new Error('Expected an eight-subject SILE dataset');
@@ -610,11 +633,13 @@ function mergeBackupProgress(incoming,current){
 }
 
 let studyImportInProgress=false;
-async function importStudyFile(file){
+async function importStudyFile(file,report=()=>{}){
  if(studyImportInProgress)return;
  studyImportInProgress=true;
  try{
-  const input=JSON.parse(await file.text());
+  const contents=await readStudyFile(file);
+  const input=JSON.parse(contents.replace(/^\uFEFF/,''));
+  report('File received. Checking and saving on this iPad…');
   // Older, progress-only exports are accepted by the same picker.
   if(input?.version===1&&input.subjects===undefined&&input.format===undefined){
    validateBackupProgress(input);
