@@ -463,6 +463,13 @@ async function checkOfflineSetup(){
    questionCount()+' questions stored. '+(tools?'Private tools stored.':'Private tools can be imported from a local file.');
  }catch(error){output.textContent='Could not check local storage: '+error.message;}
 }
+async function handleStudySelection(e){
+    const file=e.target.files?.[0];
+    try{if(file)await importStudyFile(file)}
+    catch(err){alert('Import failed: '+err.message)}
+    finally{e.target.value=''}
+  }
+const studyPicker='<label class="calcField"><span>Import study file</span><input id="fileInput" type="file"></label>';
 function renderData(){
  const topics=Object.values(studyProgress.topics||{}),questions=Object.values(studyProgress.questions||{});
  const known=topics.filter(x=>x.state==="understood").length,needs=topics.filter(x=>x.state==="needs-review").length;
@@ -470,7 +477,7 @@ function renderData(){
  '<p><strong>'+questionCount()+' questions</strong> are stored on this device.</p><p>Import one file to update your questions. Your saved progress stays on this device.</p>'+
  '<div class="paperStats"><div class="statPill"><strong>'+known+'</strong>lessons understood</div>'+
  '<div class="statPill"><strong>'+needs+'</strong>topics for revision</div><div class="statPill"><strong>'+questions.length+'</strong>questions attempted</div></div>'+
- '<div class="dataActions"><button id="replaceData" class="primaryButton">Import study file</button></div>'+
+ '<div class="dataActions">'+studyPicker+'</div>'+
  '<details class="readSection"><summary>Backup options</summary><p>Save one file with your questions, bookmarks, notes and progress. Use Import study file to restore it.</p>'+
  '<button id="backupData" class="secondaryButton">Save backup</button></details>'+
  '<div class="dataNote"><strong>Legal-content release warning:</strong> The imported 8 November dataset predates the final Taxation Contact Session and later answer-status audits. Do not mistake local availability for legal-content certification.</div>'+
@@ -479,7 +486,7 @@ function renderData(){
  '<p id="offlineSetupStatus" role="status"></p>'+
  '<p class="readerMeta">Search, topic matching and the question reader use the study bank on this device.</p></div>');
  $('#checkOfflineSetup').onclick=checkOfflineSetup;
- $('#replaceData').onclick=()=>$('#fileInput').click();
+ $('#fileInput').onchange=handleStudySelection;
  $('#backupData').onclick=backup;
 }
 function renderProgress(){
@@ -569,7 +576,7 @@ function renderOriginalPractice(){
   $('#backBtn').onclick=()=>{document.body.classList.remove('focusMode');renderOriginalPractice();};
  });
 }
-function renderSetup(){setScreen('<div class="dataPanel"><div class="eyebrow">Setup</div><h1 class="pageTitle">Import SILE study data</h1><p>Choose your study file or backup. It will be stored on this iPad.</p><div class="dataActions"><button id="importNow" class="primaryButton">Import study file</button></div></div>');$('#importNow').onclick=()=>$('#fileInput').click()}
+function renderSetup(){setScreen('<div class="dataPanel"><div class="eyebrow">Setup</div><h1 class="pageTitle">Import SILE study data</h1><p>Choose your study file or backup. It will be stored on this iPad.</p><div class="dataActions">'+studyPicker+'</div></div>');$('#fileInput').onchange=handleStudySelection}
 
 function validateStudyBank(dataset){
  if(!Array.isArray(dataset?.subjects)||dataset.subjects.length!==8)throw new Error('Expected an eight-subject SILE dataset');
@@ -673,12 +680,7 @@ function bindStatic(){
   $('#toolsBtn').onclick=()=>{if(DATA){document.body.classList.remove('focusMode');renderTools()}};
   $('#practiceBtn').onclick=()=>{document.body.classList.remove('focusMode','navOpen');renderOriginalPractice();};
   $('#dataBtn').onclick=()=>{if(DATA){document.body.classList.remove('focusMode');renderData()}};
-  $('#fileInput').onchange=async e=>{
-    const file=e.target.files?.[0];
-    try{if(file)await importStudyFile(file)}
-    catch(err){alert('Import failed: '+err.message)}
-    finally{e.target.value=''}
-  };
+
   document.addEventListener('keydown',e=>{if(e.key==='/'&&!/input|textarea/i.test(document.activeElement.tagName)){e.preventDefault();window.SILEFIND.render()}});
 }
 
