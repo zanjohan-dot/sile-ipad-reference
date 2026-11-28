@@ -21,12 +21,20 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 function openDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DBNAME,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(STORE))r.result.createObjectStore(STORE)};r.onsuccess=()=>{db=r.result;resolve()};r.onerror=()=>reject(r.error)})}
 function dbGet(k){return new Promise((resolve,reject)=>{const r=db.transaction(STORE).objectStore(STORE).get(k);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
 function dbPut(k,v){return dbPutAll([[k,v]])}
-function dbPutAll(entries){return new Promise((resolve,reject)=>{
+function dbPutAll(entries,backupProgress){return new Promise((resolve,reject)=>{
  const tx=db.transaction(STORE,'readwrite');
- tx.oncomplete=()=>resolve();
+ let nextProgress;
+ tx.oncomplete=()=>resolve(nextProgress);
  tx.onabort=()=>reject(tx.error||new Error('Local storage transaction aborted'));
  const store=tx.objectStore(STORE);
  for(const [key,value] of entries)store.put(value,key);
+ if(backupProgress){
+  const request=store.get('study_progress_v1');
+  request.onsuccess=()=>{
+   nextProgress=mergeBackupProgress(backupProgress,request.result||studyProgress);
+   store.put(nextProgress,'study_progress_v1');
+  };
+ }
 })}
 function saveStudyProgress(field,id,update){
  return new Promise((resolve,reject)=>{
@@ -458,14 +466,13 @@ async function checkOfflineSetup(){
 function renderData(){
  const topics=Object.values(studyProgress.topics||{}),questions=Object.values(studyProgress.questions||{});
  const known=topics.filter(x=>x.state==="understood").length,needs=topics.filter(x=>x.state==="needs-review").length;
- setScreen('<div class="dataPanel"><div class="eyebrow">Offline data</div><h1 class="pageTitle">Local content and revision progress</h1>'+
- '<p><strong>'+questionCount()+' questions</strong> are stored on this device.</p><p>Use Import study JSON to install a combined file or add a practice pack. Export combined study JSON saves both question banks in one file.</p>'+
+ setScreen('<div class="dataPanel"><div class="eyebrow">Offline data</div><h1 class="pageTitle">Study file</h1>'+
+ '<p><strong>'+questionCount()+' questions</strong> are stored on this device.</p><p>Import one file to update your questions. Your saved progress stays on this device.</p>'+
  '<div class="paperStats"><div class="statPill"><strong>'+known+'</strong>lessons understood</div>'+
  '<div class="statPill"><strong>'+needs+'</strong>topics for revision</div><div class="statPill"><strong>'+questions.length+'</strong>questions attempted</div></div>'+
- '<div class="dataActions"><button id="replaceData" class="primaryButton">Import study JSON</button>'+
- '<button id="backupData" class="secondaryButton">Export combined study JSON</button>'+
- '<button id="exportProgress" class="secondaryButton">Export revision progress</button></div>'+
- '<label class="calcField"><span>Restore revision progress from backup</span><input id="progressImport" type="file" accept=".json,application/json"></label>'+
+ '<div class="dataActions"><button id="replaceData" class="primaryButton">Import study file</button></div>'+
+ '<details class="readSection"><summary>Backup options</summary><p>Save one file with your questions, bookmarks, notes and progress. Use Import study file to restore it.</p>'+
+ '<button id="backupData" class="secondaryButton">Save backup</button></details>'+
  '<div class="dataNote"><strong>Legal-content release warning:</strong> The imported 8 November dataset predates the final Taxation Contact Session and later answer-status audits. Do not mistake local availability for legal-content certification.</div>'+
  '<div class="dataNote"><strong>Exam rules:</strong> The SILE examination brief prohibits AI-powered search engines and answer-generating applications during the examinations. This app is a revision system; any exam use requires checking the permitted reference-material rules.</div>'+
  '<div class="dataActions"><button id="checkOfflineSetup" class="secondaryButton">Check offline setup</button></div>'+
@@ -473,14 +480,7 @@ function renderData(){
  '<p class="readerMeta">Search, topic matching and the question reader use the study bank on this device.</p></div>');
  $('#checkOfflineSetup').onclick=checkOfflineSetup;
  $('#replaceData').onclick=()=>$('#fileInput').click();
- $('#backupData').onclick=backup;$('#exportProgress').onclick=exportStudyProgress;
- $('#progressImport').onchange=async e=>{
-  const file=e.target.files?.[0];if(!file)return;
-  try{const x=JSON.parse(await file.text());
-   if(x.version!==1||!x.topics||!x.questions||Array.isArray(x.topics)||Array.isArray(x.questions))throw new Error("Invalid progress backup");
-   await dbPut('study_progress_v1',x);studyProgress=x;toast("Revision progress restored");renderData()
-  }catch(err){alert("Progress restore failed: "+err.message)}
- };
+ $('#backupData').onclick=backup;
 }
 function renderProgress(){
  const topics=studyProgress.topics||{},questions=studyProgress.questions||{};
@@ -500,8 +500,7 @@ function renderProgress(){
  setScreen('<div class="eyebrow">Revision progress · Paper '+paper+'</div><h1 class="pageTitle">What I understand and what to revise</h1>'+
  '<p class="pageLead">Only questions with official SILE answers contribute to scored accuracy. Derived-answer comparisons and unresolved questions are not counted as officially correct or incorrect.</p>'+
  summaries+'<section class="readSection"><h2>Bookmarked questions</h2>'+
-   (savedRows||'<p>Choose Bookmark and notes in a question reader to save it here.</p>')+'</section><div class="dataActions"><button class="secondaryButton" id="exportProgressPage">Export progress</button></div>');
- $('#exportProgressPage').onclick=exportStudyProgress;
+   (savedRows||'<p>Choose Bookmark and notes in a question reader to save it here.</p>')+'</section>');
  $$('[data-saved-question]').forEach(button=>button.onclick=()=>{
   const item=saved[Number(button.dataset.savedQuestion)];
   subject=item.code;
@@ -513,10 +512,6 @@ function renderProgress(){
   $('#backBtn').textContent='Back to revision progress';
   $('#backBtn').onclick=()=>{document.body.classList.remove('focusMode');renderProgress();};
  });
-}
-function exportStudyProgress(){
- const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(studyProgress,null,2)],{type:"application/json"}));
- a.href=url;a.download="SILE_Revision_Progress_2026.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1500);
 }
 const PRACTICE_FORMAT='sile-original-practice-v1';
 
@@ -550,7 +545,7 @@ function renderOriginalPractice(){
  if(!DATA)return renderSetup();
  setScreen('<div class="eyebrow">Question bank</div><h1 class="pageTitle">Original practice</h1>'+
   '<p class="pageLead">New exam-style scenarios with an explanation for every option. Open a question in Learn mode to attempt it before seeing the practice key.</p>'+
-  (originalPractice.length?'':'<p>Use Import study JSON in Offline data to install practice questions.</p><button id="openOfflineData" class="secondaryButton">Open Offline data</button>')+
+  (originalPractice.length?'':'<p>Use Import study file in Offline data to add practice questions.</p><button id="openOfflineData" class="secondaryButton">Open Offline data</button>')+
   [1,2].map(number=>{
    const items=originalPractice.filter(q=>q.id.startsWith('P'+number+'-'));
    if(!items.length)return '';
@@ -574,7 +569,7 @@ function renderOriginalPractice(){
   $('#backBtn').onclick=()=>{document.body.classList.remove('focusMode');renderOriginalPractice();};
  });
 }
-function renderSetup(){setScreen('<div class="dataPanel"><div class="eyebrow">Setup</div><h1 class="pageTitle">Import SILE study data</h1><p>Choose a combined study JSON. If you still have two files, select the verified bank and practice pack together. They will be stored on this iPad.</p><div class="dataActions"><button id="importNow" class="primaryButton">Import study JSON</button></div></div>');$('#importNow').onclick=()=>$('#fileInput').click()}
+function renderSetup(){setScreen('<div class="dataPanel"><div class="eyebrow">Setup</div><h1 class="pageTitle">Import SILE study data</h1><p>Choose your study file or backup. It will be stored on this iPad.</p><div class="dataActions"><button id="importNow" class="primaryButton">Import study file</button></div></div>');$('#importNow').onclick=()=>$('#fileInput').click()}
 
 function validateStudyBank(dataset){
  if(!Array.isArray(dataset?.subjects)||dataset.subjects.length!==8)throw new Error('Expected an eight-subject SILE dataset');
@@ -589,27 +584,54 @@ function validateStudyBank(dataset){
  if(new Set(questions.map(q=>q.id)).size!==questions.length)throw new Error('Question IDs must be unique');
 }
 
+function isProgressMap(value){
+ return value!==null&&typeof value==='object'&&!Array.isArray(value)&&
+  Object.values(value).every(entry=>entry!==null&&typeof entry==='object'&&!Array.isArray(entry));
+}
+function validateBackupProgress(incoming){
+ if(incoming?.version!==1||!isProgressMap(incoming.topics)||!isProgressMap(incoming.questions)||
+    (incoming.review!==undefined&&!isProgressMap(incoming.review))){
+  throw new Error('This file has an invalid revision progress backup');
+ }
+}
+function mergeBackupProgress(incoming,current){
+ return {...incoming,...current,
+  topics:{...incoming.topics,...current.topics},
+  questions:{...incoming.questions,...current.questions},
+  review:{...incoming.review,...current.review}
+ };
+}
+
 let studyImportInProgress=false;
-async function importStudyFiles(files){
+async function importStudyFile(file){
  if(studyImportInProgress)return;
  studyImportInProgress=true;
  try{
-  const inputs=await Promise.all(files.map(async file=>JSON.parse(await file.text())));
-  const banks=inputs.filter(input=>input?.format!==PRACTICE_FORMAT);
-  const packs=inputs.filter(input=>input?.format===PRACTICE_FORMAT);
-  if(banks.length>1||packs.length>1)throw new Error('Select one study bank and, if needed, one practice pack');
-  const incoming=banks[0];
-  if(banks.length)validateStudyBank(incoming);
-  if(!incoming&&!sourceBank)throw new Error('Select the verified study bank together with the practice pack');
-  const {originalPractice:embeddedPractice,...dataset}=incoming||sourceBank;
+  const input=JSON.parse(await file.text());
+  // Older, progress-only exports are accepted by the same picker.
+  if(input?.version===1&&input.subjects===undefined&&input.format===undefined){
+   validateBackupProgress(input);
+   studyProgress=await dbPutAll([],input);
+   toast('Revision progress restored');
+   if(DATA)renderData();else renderSetup();
+   return;
+  }
+  const isPractice=input?.format===PRACTICE_FORMAT;
+  if(!isPractice)validateStudyBank(input);
+  if(isPractice&&!sourceBank)throw new Error('Import the complete study file first');
+  const {originalPractice:embeddedPractice,revisionProgress,...dataset}=isPractice?sourceBank:input;
+  if(revisionProgress!==undefined)validateBackupProgress(revisionProgress);
   const practiceById=new Map(originalPractice.map(question=>[question.id,question]));
-  for(const pack of [embeddedPractice,...packs].filter(pack=>pack!==undefined)){
+  const pack=isPractice?input:embeddedPractice;
+  if(pack!==undefined){
    for(const question of validatePracticePack(pack,dataset))practiceById.set(question.id,question);
   }
   const practice=validatePracticePack({format:PRACTICE_FORMAT,questions:[...practiceById.values()]},dataset);
   const bank=mergeStudyBank(dataset,practice);
   const records=flatten(bank);
-  await dbPutAll([['dataset',dataset],['original_practice_v1',practice]]);
+  const entries=[['dataset',dataset],['original_practice_v1',practice]];
+  const nextProgress=await dbPutAll(entries,revisionProgress);
+  if(nextProgress)studyProgress=nextProgress;
   sourceBank=dataset;
   originalPractice=practice;
   DATA=bank;
@@ -626,13 +648,14 @@ async function importStudyFiles(files){
  }
 }
 function combinedStudyBank(){
- return {...sourceBank,originalPractice:{format:PRACTICE_FORMAT,questions:originalPractice}};
+ return {...sourceBank,originalPractice:{format:PRACTICE_FORMAT,questions:originalPractice},
+  revisionProgress:studyProgress};
 }
 function backup(){
  if(!DATA)return;
  const a=document.createElement('a');
  a.href=URL.createObjectURL(new Blob([JSON.stringify(combinedStudyBank())],{type:'application/json'}));
- a.download='SILE_Combined_Study_Bank.json';
+ a.download='SILE_Study_Backup.json';
  a.click();
  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
@@ -651,8 +674,8 @@ function bindStatic(){
   $('#practiceBtn').onclick=()=>{document.body.classList.remove('focusMode','navOpen');renderOriginalPractice();};
   $('#dataBtn').onclick=()=>{if(DATA){document.body.classList.remove('focusMode');renderData()}};
   $('#fileInput').onchange=async e=>{
-    const files=Array.from(e.target.files||[]);
-    try{if(files.length)await importStudyFiles(files)}
+    const file=e.target.files?.[0];
+    try{if(file)await importStudyFile(file)}
     catch(err){alert('Import failed: '+err.message)}
     finally{e.target.value=''}
   };
