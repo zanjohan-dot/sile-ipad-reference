@@ -1,8 +1,8 @@
 /* Cache the full SILE shell. Updates only replace this app’s shell caches. */
-const CACHE="sile-revision-preview-shell-v23";
+const CACHE="sile-revision-preview-shell-v25";
 const ASSETS=[
- "./","./index.html","./reader.html","./offline-study.html","./styles.css?v=23","./app.js?v=23","./study-ux.js?v=23","./tools-enhancements.js?v=23",
- "./retrieval-enhancements.js?v=23","./diagnostic.html","./reset.html","./manifest.webmanifest",
+ "./","./index.html","./reader.html","./offline-study.html","./styles.css?v=23","./app.js?v=24","./study-ux.js?v=23","./tools-enhancements.js?v=23",
+ "./retrieval-enhancements.js?v=25","./diagnostic.html","./reset.html","./manifest.webmanifest",
  "./icon-192.png","./icon-512.png","./apple-touch-icon.png"
 ];
 const scope=new URL(self.registration.scope);
@@ -27,3 +27,4 @@ self.addEventListener("fetch",event=>{
   [scope.pathname,new URL("index.html",scope).pathname,new URL("reader.html",scope).pathname,new URL("offline-study.html",scope).pathname].includes(url.pathname);
  if(navigation||shellAssets.has(url.href)){event.respondWith(appRequest(event.request,navigation));return;}
 });
+
